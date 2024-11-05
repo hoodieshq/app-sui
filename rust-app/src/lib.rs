@@ -34,6 +34,9 @@ pub mod utils;
 pub mod test_parsers;
 
 #[cfg(target_family = "bolos")]
+pub mod handle_apdu;
+
+#[cfg(target_family = "bolos")]
 pub mod implementation;
 
 #[cfg(target_family = "bolos")]
