@@ -8,7 +8,7 @@ def test_version(backend):
         data = tomli.load(f)
     version = (tuple(map(int, data['package']['version'].split('.'))), "alamgu example")
     # Use the app interface instead of raw interface
-    client = Client(backend)
+    client = Client(backend, use_block_protocol=True)
     # Send the GET_VERSION instruction
     response = client.get_app_and_version()
     assert response == (version)
