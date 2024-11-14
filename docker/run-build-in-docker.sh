@@ -9,6 +9,6 @@ do
     cargo ledger build $device
     cd ..
     pytest ragger-tests --tb=short -v --device ${device/nanosplus/nanosp};
+    chown -R $HOST_UID:$HOST_GID rust-app/target/ ragger-tests/
     cp rust-app/target/$device/release/$APP_NAME $OUT_DIR/$device
-    chown $HOST_UID:$HOST_GID $OUT_DIR/$device/$APP_NAME
 done
