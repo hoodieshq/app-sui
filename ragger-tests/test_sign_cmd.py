@@ -1,6 +1,7 @@
 import pytest
 import concurrent.futures
 import time
+import base64
 
 from application_client.client import Client, Errors
 from contextlib import contextmanager
@@ -8,25 +9,39 @@ from ragger.error import ExceptionRAPDU
 from ragger.navigator import NavIns, NavInsID
 from utils import ROOT_SCREENSHOT_PATH, check_signature_validity, run_apdu_and_nav_tasks_concurrently
 
-def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
+# can sign a simple Sui transfer transaction
+def test_sign_tx_sui_transfer(backend, scenario_navigator, firmware, navigator):
     client = Client(backend, use_block_protocol=True)
-    path = "m/44'/535348'/0'"
+    path = "m/44'/784'/0'"
 
     _, public_key, _, _ = client.get_public_key(path=path)
     assert len(public_key) == 32
 
-    transaction="smalltx".encode('utf-8')
+    transaction = bytes.fromhex('000000000002000840420f000000000000204f2370b2a4810ad6c8e1cfd92cc8c8818fef8f59e3a80cea17871f78d850ba4b0202000101000001010200000101006fb21feead027da4873295affd6c4f3618fe176fa2fbf3e7b5ef1d9463b31e210112a6d0c44edc630d2724b1f57fea4f93308b1d22164402c65778bd99379c4733070000000000000020f2fd3c87b227f1015182fe4348ed680d7ed32bcd3269704252c03e1d0b13d30d6fb21feead027da4873295affd6c4f3618fe176fa2fbf3e7b5ef1d9463b31e2101000000000000000c0400000000000000')
 
     def apdu_task():
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
         navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+            instructions=[ NavInsID.RIGHT_CLICK # Transfer SUI
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # From ...
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # To ...
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Amount
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Max Gas
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Sign Transaction?
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.BOTH_CLICK
+                          ]
             , timeout=10
+            , test_case_name="test_sign_tx_sui_transfer"
             , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_short_tx"
-            , screen_change_before_first_instruction=False
+            , screen_change_before_first_instruction=True
             , screen_change_after_last_instruction=False
         )
 
@@ -34,26 +49,30 @@ def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
 
-    with blind_sign_enabled(navigator):
-        run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
+    run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
-def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
+# can blind sign an unknown transaction
+def test_sign_tx_blind_sign(backend, scenario_navigator, firmware, navigator):
     client = Client(backend, use_block_protocol=True)
-    path = "m/44'/535348'/0'"
+    path = "m/44'/784'/0'"
 
     _, public_key, _, _ = client.get_public_key(path=path)
 
-    transaction=("looongtx" * 100).encode('utf-8')
+    transaction = bytes.fromhex('00000000050205546e7f126d2f40331a543b9608439b582fd0d103000000000000002080fdabcc90498e7eb8413b140c4334871eeafa5a86203fd9cfdb032f604f49e1284af431cf032b5d85324135bf9a3073e920d7f5020000000000000020a06f410c175e828c24cee84cb3bd95cff25c33fbbdcb62c6596e8e423784ffe702d08074075c7097f361e8b443e2075a852a2292e8a08074075c7097f361e8b443e2075a852a2292e80180969800000000001643fb2578ff7191c643079a62c1cca8ec2752bc05546e7f126d2f40331a543b9608439b582fd0d103000000000000002080fdabcc90498e7eb8413b140c4334871eeafa5a86203fd9cfdb032f604f49e101000000000000002c01000000000000')
 
     def apdu_task():
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
         navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+            instructions=[ NavInsID.RIGHT_CLICK # Warning...
+                           , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                           , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # Transaction Hash
+                           , NavInsID.RIGHT_CLICK # Blind Sign Transaction?
+                           , NavInsID.BOTH_CLICK]
             , timeout=10
             , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_long_tx"
+            , test_case_name="test_sign_tx_blind_sign"
             , screen_change_before_first_instruction=False
             , screen_change_after_last_instruction=False
         )
@@ -69,40 +88,54 @@ def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
 # The test will ask for a transaction signature that will be refused on screen
 def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
     client = Client(backend, use_block_protocol=True)
-    path = "m/44'/535348'/0'"
+    path = "m/44'/784'/0'"
 
-    transaction="smalltx".encode('utf-8')
+    transaction = bytes.fromhex('000000000002000840420f000000000000204f2370b2a4810ad6c8e1cfd92cc8c8818fef8f59e3a80cea17871f78d850ba4b0202000101000001010200000101006fb21feead027da4873295affd6c4f3618fe176fa2fbf3e7b5ef1d9463b31e210112a6d0c44edc630d2724b1f57fea4f93308b1d22164402c65778bd99379c4733070000000000000020f2fd3c87b227f1015182fe4348ed680d7ed32bcd3269704252c03e1d0b13d30d6fb21feead027da4873295affd6c4f3618fe176fa2fbf3e7b5ef1d9463b31e2101000000000000000c0400000000000000')
 
     def apdu_task():
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
         navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+            instructions=[ NavInsID.RIGHT_CLICK # Transfer SUI
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # From ...
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # To ...
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Amount
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Max Gas
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Sign Transaction?
+                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
+                          , NavInsID.RIGHT_CLICK # Confirm
+                          , NavInsID.BOTH_CLICK
+                          ]
             , timeout=10
-            , path=scenario_navigator.screenshot_path
             , test_case_name="test_sign_tx_refused"
-            , screen_change_before_first_instruction=False
+            , path=scenario_navigator.screenshot_path
+            , screen_change_before_first_instruction=True
             , screen_change_after_last_instruction=False
         )
 
     def check_result(result):
-        assert len(result) == 64
-        assert check_signature_validity(public_key, result, transaction)
+        pytest.fail('should not happen')
 
     with pytest.raises(ExceptionRAPDU) as e:
-        with blind_sign_enabled(navigator):
-            run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
+        run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
-    # Assert that we have received a refusal
-    # assert e.value.status == Errors.SW_DENY
     assert len(e.value.data) == 0
 
-def test_sign_tx_blindsign_disabled(backend, scenario_navigator, firmware, navigator):
+# should reject signing a non-SUI coin transaction, if blind signing is not enabled
+def test_sign_tx_non_sui_transfer_rejected(backend, scenario_navigator, firmware, navigator):
     client = Client(backend, use_block_protocol=True)
-    path = "m/44'/535348'/0'"
+    path = "m/44'/784'/0'"
 
-    transaction="smalltx".encode('utf-8')
+    _, public_key, _, _ = client.get_public_key(path=path)
+    assert len(public_key) == 32
+
+    transaction = base64.b64decode('AAAAAAADAQAe2uv1Mds+xCVK5Jv/Dv5cgEl/9DthDcpbjWcsmFpzbs6BNQAAAAAAIKPD8GQqgBpJZRV+nFDRE7rqR0Za8x0pyfLusVdpPPVRAAgADl+jHAAAAAAg5y3MHATlk+Ik5cPIdEz5iPANs1jcXZHVGjh4Mb16lwkCAgEAAAEBAQABAQIAAAECAF/sd27xyQe/W+gY4WRtPlQro1siWQu79s0pxbbCSRafAfnjaU5yJSFFDJznsAaBqbkiR9CB8DJqWki8fn8AUZeQz4E1AAAAAAAgTRU/MsawTJirpVwjDF8gyiEbaT0+7J0V8ifUEGGBkcVf7Hdu8ckHv1voGOFkbT5UK6NbIlkLu/bNKcW2wkkWn+gDAAAAAAAA8NdGAAAAAAAA')
 
     def apdu_task():
         return client.sign_tx(path=path, transaction=transaction)
@@ -111,20 +144,49 @@ def test_sign_tx_blindsign_disabled(backend, scenario_navigator, firmware, navig
         navigator.navigate_and_compare(
             instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
             , timeout=10
+            , test_case_name="test_sign_tx_non_sui_transfer_rejected"
             , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_blindsign_disabled"
-            , screen_change_before_first_instruction=False
+            , screen_change_before_first_instruction=True
             , screen_change_after_last_instruction=False
         )
 
     def check_result(result):
-        assert len(result) == 64
+        pytest.fail('should not happen')
 
     with pytest.raises(ExceptionRAPDU) as e:
         run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
-    # Assert that we have received a refusal
-    # assert e.value.status == Errors.SW_DENY
+    assert len(e.value.data) == 0
+
+# should reject signing an unknown transaction, if blind signing is not enabled
+def test_sign_tx_unknown_tx_rejected(backend, scenario_navigator, firmware, navigator):
+    client = Client(backend, use_block_protocol=True)
+    path = "m/44'/784'/0'"
+
+    _, public_key, _, _ = client.get_public_key(path=path)
+    assert len(public_key) == 32
+
+    transaction = bytes.fromhex('00000000050205546e7f126d2f40331a543b9608439b582fd0d103000000000000002080fdabcc90498e7eb8413b140c4334871eeafa5a86203fd9cfdb032f604f49e1284af431cf032b5d85324135bf9a3073e920d7f5020000000000000020a06f410c175e828c24cee84cb3bd95cff25c33fbbdcb62c6596e8e423784ffe702d08074075c7097f361e8b443e2075a852a2292e8a08074075c7097f361e8b443e2075a852a2292e80180969800000000001643fb2578ff7191c643079a62c1cca8ec2752bc05546e7f126d2f40331a543b9608439b582fd0d103000000000000002080fdabcc90498e7eb8413b140c4334871eeafa5a86203fd9cfdb032f604f49e101000000000000002c01000000000000')
+
+    def apdu_task():
+        return client.sign_tx(path=path, transaction=transaction)
+
+    def nav_task():
+        navigator.navigate_and_compare(
+            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
+            , timeout=10
+            , test_case_name="test_sign_tx_unknown_tx_rejected"
+            , path=scenario_navigator.screenshot_path
+            , screen_change_before_first_instruction=True
+            , screen_change_after_last_instruction=False
+        )
+
+    def check_result(result):
+        pytest.fail('should not happen')
+
+    with pytest.raises(ExceptionRAPDU) as e:
+        run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
+
     assert len(e.value.data) == 0
 
 @contextmanager
