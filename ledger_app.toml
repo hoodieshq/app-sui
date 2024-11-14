@@ -2,3 +2,6 @@
 build_directory = "./rust-app/"
 sdk = "Rust"
 devices = ["nanos", "nanox", "nanos+"]
+
+[tests]
+pytest_directory = "./ragger-tests/"
