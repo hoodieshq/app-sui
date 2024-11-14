@@ -6,7 +6,7 @@ def test_version(backend):
 
     with open("./rust-app/Cargo.toml", "rb") as f:
         data = tomli.load(f)
-    version = (tuple(map(int, data['package']['version'].split('.'))), "alamgu example")
+    version = (tuple(map(int, data['package']['version'].split('.'))), "sui")
     # Use the app interface instead of raw interface
     client = Client(backend, use_block_protocol=True)
     # Send the GET_VERSION instruction
