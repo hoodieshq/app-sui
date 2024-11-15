@@ -1,9 +1,10 @@
 use crate::interface::*;
 use crate::settings::*;
+use crate::test_parsers::*;
+use crate::ui::*;
 use crate::utils::*;
 use alamgu_async_block::*;
 use arrayvec::ArrayVec;
-use core::fmt::Write;
 use ledger_crypto_helpers::common::{try_option, Address, CryptographyError};
 use ledger_crypto_helpers::eddsa::{
     ed25519_public_key_bytes, eddsa_sign, with_public_keys, Ed25519RawPubKeyAddress,
@@ -12,8 +13,10 @@ use ledger_crypto_helpers::hasher::{Base64Hash, Blake2b, Hasher};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::core_parsers::*;
-use ledger_parser_combinators::interp::*;
-use ledger_prompts_ui::final_accept_prompt;
+use ledger_parser_combinators::endianness::*;
+use ledger_parser_combinators::interp_parser::{
+    reject, Action, DefaultInterp, InterpParser, MoveAction, ParseResult, ParserCommon, SubInterp,
+};
 
 use core::convert::TryFrom;
 use core::ops::Deref;
@@ -47,9 +50,7 @@ pub async fn get_address_apdu(io: HostIO, prompt: bool) {
     if with_public_keys(&path, false, |key, pkh: &PKH| {
         try_option(|| -> Option<()> {
             if prompt {
-                scroller("Provide Public Key", |_w| Ok(()))?;
-                scroller_paginated("Address", |w| Ok(write!(w, "{pkh}")?))?;
-                final_accept_prompt(&[])?;
+                confirm_address(pkh)?;
             }
             // Should return the format that the chain customarily uses for public keys; for
             // ed25519 that's usually r | s with no prefix, which isn't quite our internal
