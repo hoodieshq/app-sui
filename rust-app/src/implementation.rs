@@ -104,14 +104,12 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
     } else if !settings.get_blind_sign() {
         warn_tx_not_recognized();
         reject::<()>(SyscallError::NotSupported as u16).await;
-    } else {
-        if with_public_keys(&path, false, |_, pkh: &PKH| {
-            confirm_sign_tx(pkh, hash.deref()).ok_or(CryptographyError::NoneError)
-        })
-        .is_err()
-        {
-            reject::<()>(StatusWords::UserCancelled as u16).await;
-        }
+    } else if with_public_keys(&path, false, |_, pkh: &PKH| {
+        confirm_sign_tx(pkh, hash.deref()).ok_or(CryptographyError::NoneError)
+    })
+    .is_err()
+    {
+        reject::<()>(StatusWords::UserCancelled as u16).await;
     }
 
     // By the time we get here, we've approved and just need to do the signature.
