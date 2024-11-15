@@ -8,29 +8,29 @@ use num_enum::TryFromPrimitive;
 // Payload for a public key request
 pub type Bip32Key = DArray<Byte, U32<{ Endianness::Little }>, 10>;
 
-pub type SignParameters = (IntentMessage<true>, Bip32Key);
+pub type SignParameters = (IntentMessage, Bip32Key);
 
 // Sui Types
-pub type IntentMessage<const PROMPT: bool> = (Intent, TransactionData<PROMPT>);
+pub type IntentMessage = (Intent, TransactionData);
 
-pub struct TransactionData<const PROMPT: bool>;
+pub struct TransactionData;
 
-pub type TransactionDataV1<const PROMPT: bool> = (
-    TransactionKind<PROMPT>,
+pub type TransactionDataV1 = (
+    TransactionKind,
     SuiAddress,            // sender
-    GasData<PROMPT>,       // gas_data
+    GasData,               // gas_data
     TransactionExpiration, // expiration
 );
 
-pub struct TransactionKind<const PROMPT: bool>;
+pub struct TransactionKind;
 
-pub struct ProgrammableTransaction<const PROMPT: bool>;
+pub struct ProgrammableTransaction;
 
 pub struct CommandSchema;
 pub struct ArgumentSchema;
 pub struct CallArgSchema;
 
-pub type GasData<const PROMPT: bool> = (
+pub type GasData = (
     Vec<ObjectRef, { usize::MAX }>, // payment
     SuiAddress,                     // owner
     Amount,                         // price

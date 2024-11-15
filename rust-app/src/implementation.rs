@@ -13,7 +13,7 @@ use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::bcs::async_parser::*;
 use ledger_parser_combinators::interp::*;
-use ledger_prompts_ui::{final_accept_prompt, ScrollerError};
+use ledger_prompts_ui::final_accept_prompt;
 
 use core::convert::TryFrom;
 use core::future::Future;
@@ -305,19 +305,18 @@ impl<BS: Clone + Readable> AsyncParser<ArgumentSchema, BS> for DefaultInterp {
     }
 }
 
-impl<const PROMPT: bool> HasOutput<ProgrammableTransaction<PROMPT>>
-    for ProgrammableTransaction<PROMPT>
-{
-    type Output = ();
+impl HasOutput<ProgrammableTransaction> for ProgrammableTransaction {
+    type Output = (
+        <DefaultInterp as HasOutput<Recipient>>::Output,
+        <DefaultInterp as HasOutput<Amount>>::Output,
+    );
 }
 
-impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<ProgrammableTransaction<PROMPT>, BS>
-    for ProgrammableTransaction<PROMPT>
-{
+impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for ProgrammableTransaction {
     type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
-            let mut recipient = None;
+            let mut recipient_addr = None;
             let mut recipient_index = None;
             let mut amounts: ArrayVec<(u64, u32), SPLIT_COIN_ARRAY_LENGTH> = ArrayVec::new();
 
@@ -334,9 +333,9 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<ProgrammableTransacti
                     )
                     .await;
                     match arg {
-                        CallArg::RecipientAddress(addr) => match recipient {
+                        CallArg::RecipientAddress(addr) => match recipient_addr {
                             None => {
-                                recipient = Some(addr);
+                                recipient_addr = Some(addr);
                                 recipient_index = Some(i);
                             }
                             // Reject on multiple RecipientAddress(s)
@@ -377,6 +376,18 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<ProgrammableTransacti
                 )
                 .await;
             }
+
+            let recipient = match recipient_addr {
+                Some(addr) => addr,
+                _ => {
+                    reject_on(
+                        core::file!(),
+                        core::line!(),
+                        SyscallError::NotSupported as u16,
+                    )
+                    .await
+                }
+            };
 
             let mut verified_recipient = false;
             let mut total_amount: u64 = 0;
@@ -480,37 +491,16 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<ProgrammableTransacti
                 .await;
             }
 
-            if PROMPT
-                && Option::<()>::is_none(
-                    &try {
-                        scroller_paginated("To", |w| {
-                            Ok(write!(
-                                w,
-                                "0x{}",
-                                HexSlice(&recipient.ok_or(ScrollerError)?)
-                            )?)
-                        })?;
-
-                        let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
-                        scroller_paginated("Amount", |w| {
-                            Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
-                        })?;
-                    },
-                )
-            {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            }
+            (recipient, total_amount)
         }
     }
 }
 
-impl<const PROMPT: bool> HasOutput<TransactionKind<PROMPT>> for TransactionKind<PROMPT> {
-    type Output = ();
+impl HasOutput<TransactionKind> for TransactionKind {
+    type Output = <ProgrammableTransaction as HasOutput<ProgrammableTransaction>>::Output;
 }
 
-impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<TransactionKind<PROMPT>, BS>
-    for TransactionKind<PROMPT>
-{
+impl<BS: Clone + Readable> AsyncParser<TransactionKind, BS> for TransactionKind {
     type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
@@ -519,11 +509,11 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<TransactionKind<PROMP
             match enum_variant {
                 0 => {
                     trace!("TransactionKind: ProgrammableTransaction");
-                    <ProgrammableTransaction<PROMPT> as AsyncParser<
-                        ProgrammableTransaction<PROMPT>,
-                        BS,
-                    >>::parse(&ProgrammableTransaction::<PROMPT>, input)
-                    .await;
+                    <ProgrammableTransaction as AsyncParser<ProgrammableTransaction, BS>>::parse(
+                        &ProgrammableTransaction,
+                        input,
+                    )
+                    .await
                 }
                 _ => {
                     trace!("TransactionKind: {}", enum_variant);
@@ -593,8 +583,8 @@ impl<BS: Clone + Readable> AsyncParser<TransactionExpiration, BS> for DefaultInt
     }
 }
 
-const fn gas_data_parser<BS: Clone + Readable, const PROMPT: bool>(
-) -> impl AsyncParser<GasData<PROMPT>, BS> + HasOutput<GasData<PROMPT>, Output = ()> {
+const fn gas_data_parser<BS: Clone + Readable>(
+) -> impl AsyncParser<GasData, BS> + HasOutput<GasData, Output = u64> {
     Action(
         (
             SubInterp(object_ref_parser()),
@@ -608,13 +598,7 @@ const fn gas_data_parser<BS: Clone + Readable, const PROMPT: bool>(
             // just ignore that field.
             //
             // C.F. https://github.com/MystenLabs/sui/pull/8676
-            if PROMPT {
-                let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
-                scroller("Max Gas", |w| {
-                    Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())?)
-                })?
-            }
-            Some(())
+            Some(gas_budget)
         },
     )
 }
@@ -632,27 +616,27 @@ const fn intent_parser<BS: Readable>(
     })
 }
 
-const fn transaction_data_v1_parser<BS: Clone + Readable, const PROMPT: bool>(
-) -> impl AsyncParser<TransactionDataV1<PROMPT>, BS> + HasOutput<TransactionDataV1<PROMPT>, Output = ()>
-{
+type TransactionDataV1Output = (<TransactionKind as HasOutput<TransactionKind>>::Output, u64);
+
+const fn transaction_data_v1_parser<BS: Clone + Readable>(
+) -> impl AsyncParser<TransactionDataV1, BS>
+       + HasOutput<TransactionDataV1, Output = TransactionDataV1Output> {
     Action(
         (
-            TransactionKind::<PROMPT>,
+            TransactionKind,
             DefaultInterp,
-            gas_data_parser::<_, PROMPT>(),
+            gas_data_parser(),
             DefaultInterp,
         ),
-        |_| Some(()),
+        |(v, _, gas_budget, _)| Some((v, gas_budget)),
     )
 }
 
-impl<const PROMPT: bool> HasOutput<TransactionData<PROMPT>> for TransactionData<PROMPT> {
-    type Output = ();
+impl HasOutput<TransactionData> for TransactionData {
+    type Output = TransactionDataV1Output;
 }
 
-impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<TransactionData<PROMPT>, BS>
-    for TransactionData<PROMPT>
-{
+impl<BS: Clone + Readable> AsyncParser<TransactionData, BS> for TransactionData {
     type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
@@ -661,7 +645,7 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<TransactionData<PROMP
             match enum_variant {
                 0 => {
                     trace!("TransactionData: V1");
-                    transaction_data_v1_parser::<_, PROMPT>().parse(input).await;
+                    transaction_data_v1_parser().parse(input).await
                 }
                 _ => {
                     reject_on(
@@ -676,9 +660,10 @@ impl<BS: Clone + Readable, const PROMPT: bool> AsyncParser<TransactionData<PROMP
     }
 }
 
-const fn tx_parser<BS: Clone + Readable, const PROMPT: bool>(
-) -> impl AsyncParser<IntentMessage<PROMPT>, BS> + HasOutput<IntentMessage<PROMPT>, Output = ()> {
-    Action((intent_parser(), TransactionData::<PROMPT>), |_| Some(()))
+const fn tx_parser<BS: Clone + Readable>() -> impl AsyncParser<IntentMessage, BS>
+       + HasOutput<IntentMessage, Output = <TransactionData as HasOutput<TransactionData>>::Output>
+{
+    Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
 
 pub async fn sign_apdu(io: HostIO, settings: Settings) {
@@ -694,47 +679,57 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         let mut txn = input[0].clone();
         NoinlineFut(async move {
             trace!("Beginning check parse");
-            TryFuture(tx_parser::<_, false>().parse(&mut txn))
-                .await
-                .is_some()
+            TryFuture(tx_parser().parse(&mut txn)).await.is_some()
         })
         .await
     };
 
     if known_txn {
+        let mut txn = input[0].clone();
+        let ((recipient, total_amount), gas_budget) = tx_parser().parse(&mut txn).await;
+
+        let mut bs = input[1].clone();
+        let path = BIP_PATH_PARSER.parse(&mut bs).await;
+        if !path.starts_with(&BIP32_PREFIX[0..2]) {
+            reject::<()>(SyscallError::InvalidParameter as u16).await;
+        }
+
+        // Show prompts after all inputs have been parsed
         if scroller("Transfer", |w| Ok(write!(w, "SUI")?)).is_none() {
             reject::<()>(StatusWords::UserCancelled as u16).await;
         };
+
+        if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
+            try_option(|| -> Option<()> {
+                scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
+                Some(())
+            }())
+        })
+        .ok()
+        .is_none()
         {
-            let mut bs = input[1].clone();
-            NoinlineFut(async move {
-                let path = BIP_PATH_PARSER.parse(&mut bs).await;
-                if !path.starts_with(&BIP32_PREFIX[0..2]) {
-                    reject::<()>(SyscallError::InvalidParameter as u16).await;
-                }
-                if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
-                    try_option(|| -> Option<()> {
-                        scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
-                        Some(())
-                    }())
-                })
-                .ok()
-                .is_none()
-                {
-                    reject::<()>(StatusWords::UserCancelled as u16).await;
-                }
-            })
-            .await
-        };
+            reject::<()>(StatusWords::UserCancelled as u16).await;
+        }
 
         {
-            let mut txn = input[0].clone();
-            NoinlineFut(async move {
-                trace!("Beginning parse");
-                tx_parser::<_, true>().parse(&mut txn).await;
-            })
-            .await
-        };
+            if Option::<()>::is_none(
+                &try {
+                    scroller_paginated("To", |w| Ok(write!(w, "0x{}", HexSlice(&recipient))?))?;
+
+                    let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
+                    scroller_paginated("Amount", |w| {
+                        Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
+                    })?;
+
+                    let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
+                    scroller("Max Gas", |w| {
+                        Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())?)
+                    })?
+                },
+            ) {
+                reject::<()>(StatusWords::UserCancelled as u16).await;
+            }
+        }
 
         if final_accept_prompt(&["Sign Transaction?"]).is_none() {
             reject::<()>(StatusWords::UserCancelled as u16).await;
@@ -747,11 +742,8 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
             )?)
         });
         reject::<()>(SyscallError::NotSupported as u16).await;
-    } else if scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?)).is_none() {
-        reject::<()>(StatusWords::UserCancelled as u16).await;
     }
 
-    // By the time we get here, we've approved and just need to do the signature.
     NoinlineFut(async move {
         let mut hasher: Blake2b = Hasher::new();
         {
@@ -769,6 +761,10 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         }
         let hash: HexHash<32> = hasher.finalize();
         if !known_txn {
+            // Show prompts after all inputs have been parsed
+            if scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?)).is_none() {
+                reject::<()>(StatusWords::UserCancelled as u16).await;
+            }
             if scroller("Transaction Hash", |w| Ok(write!(w, "0x{hash}")?)).is_none() {
                 reject::<()>(StatusWords::UserCancelled as u16).await;
             };
