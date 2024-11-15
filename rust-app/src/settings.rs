@@ -20,7 +20,7 @@ impl Default for Settings {
 
 impl Settings {
     #[inline(never)]
-    pub fn get_mut(&self) -> &mut AtomicStorage<[u8; SETTINGS_SIZE]> {
+    pub fn get_mut(&mut self) -> &mut AtomicStorage<[u8; SETTINGS_SIZE]> {
         unsafe {
             return SETTINGS.get_mut();
         };
