@@ -1,3 +1,4 @@
+use crate::handle_apdu::handle_apdu;
 use crate::implementation::*;
 use crate::interface::*;
 use crate::menu::*;
