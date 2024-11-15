@@ -1,6 +1,5 @@
 use crate::interface::*;
 use crate::settings::*;
-use crate::test_parsers::*;
 use crate::utils::*;
 use alamgu_async_block::*;
 use arrayvec::ArrayVec;
@@ -11,14 +10,12 @@ use ledger_crypto_helpers::eddsa::{
 };
 use ledger_crypto_helpers::hasher::{Base64Hash, Blake2b, Hasher};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
-use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::core_parsers::*;
 use ledger_parser_combinators::interp::*;
 use ledger_prompts_ui::final_accept_prompt;
 
 use core::convert::TryFrom;
-use core::future::Future;
 use core::ops::Deref;
 use zeroize::Zeroizing;
 
@@ -110,7 +107,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         if final_accept_prompt(&["Sign Transaction?"]).is_none() {
             reject::<()>(StatusWords::UserCancelled as u16).await;
         };
-    } else if settings.get() == 0 {
+    } else if !settings.get_blind_sign() {
         scroller("WARNING", |w| {
             Ok(write!(
                 w,
@@ -146,41 +143,5 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         io.result_final(&sig.0[0..]).await;
     } else {
         reject::<()>(SyscallError::Unspecified as u16).await;
-    }
-}
-
-pub type APDUsFuture = impl Future<Output = ()>;
-
-#[inline(never)]
-pub fn handle_apdu_async(io: HostIO, ins: Ins, settings: Settings) -> APDUsFuture {
-    trace!("Constructing future");
-    async move {
-        trace!("Dispatching");
-        match ins {
-            Ins::GetVersion => {
-                const APP_NAME: &str = "alamgu example";
-                let mut rv = ArrayVec::<u8, 220>::new();
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MINOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_PATCH").parse().unwrap());
-                let _ = rv.try_extend_from_slice(APP_NAME.as_bytes());
-                io.result_final(&rv).await;
-            }
-            Ins::VerifyAddress => {
-                NoinlineFut(get_address_apdu(io, true)).await;
-            }
-            Ins::GetPubkey => {
-                NoinlineFut(get_address_apdu(io, false)).await;
-            }
-            Ins::Sign => {
-                trace!("Handling sign");
-                NoinlineFut(sign_apdu(io, settings)).await;
-            }
-            Ins::TestParsers => {
-                NoinlineFut(test_parsers(io)).await;
-            }
-            Ins::GetVersionStr => {}
-            Ins::Exit => ledger_device_sdk::exit_app(0),
-        }
     }
 }

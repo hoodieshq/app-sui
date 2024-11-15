@@ -1,5 +1,4 @@
-use crate::handle_apdu::handle_apdu;
-use crate::implementation::*;
+use crate::handle_apdu::*;
 use crate::interface::*;
 use crate::menu::*;
 use crate::settings::*;
@@ -113,22 +112,5 @@ pub fn app_main() {
                 //trace!("Ignoring ticker event");
             }
         }
-    }
-}
-
-// We are single-threaded in fact, albeit with nontrivial code flow. We don't need to worry about
-// full atomicity of the below globals.
-struct SingleThreaded<T>(T);
-unsafe impl<T> Send for SingleThreaded<T> {}
-unsafe impl<T> Sync for SingleThreaded<T> {}
-impl<T> core::ops::Deref for SingleThreaded<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-impl<T> core::ops::DerefMut for SingleThreaded<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
     }
 }
