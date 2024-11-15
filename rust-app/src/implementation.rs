@@ -13,10 +13,7 @@ use ledger_crypto_helpers::hasher::{Base64Hash, Blake2b, Hasher};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::core_parsers::*;
-use ledger_parser_combinators::endianness::*;
-use ledger_parser_combinators::interp_parser::{
-    reject, Action, DefaultInterp, InterpParser, MoveAction, ParseResult, ParserCommon, SubInterp,
-};
+use ledger_parser_combinators::interp::*;
 
 use core::convert::TryFrom;
 use core::ops::Deref;
