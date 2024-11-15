@@ -25,17 +25,11 @@ def test_sign_tx_sui_transfer(backend, scenario_navigator, firmware, navigator):
     def nav_task():
         navigator.navigate_and_compare(
             instructions=[ NavInsID.RIGHT_CLICK # Transfer SUI
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # From ...
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # To ...
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Amount
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Max Gas
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Sign Transaction?
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.BOTH_CLICK
                           ]
             , timeout=10
@@ -66,7 +60,6 @@ def test_sign_tx_blind_sign(backend, scenario_navigator, firmware, navigator):
     def nav_task():
         navigator.navigate_and_compare(
             instructions=[ NavInsID.RIGHT_CLICK # Warning...
-                           , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                            , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # Transaction Hash
                            , NavInsID.RIGHT_CLICK # Blind Sign Transaction?
                            , NavInsID.BOTH_CLICK]
@@ -98,17 +91,11 @@ def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
     def nav_task():
         navigator.navigate_and_compare(
             instructions=[ NavInsID.RIGHT_CLICK # Transfer SUI
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # From ...
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK # To ...
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Amount
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Max Gas
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Sign Transaction?
-                          , NavIns(NavInsID.WAIT_FOR_TEXT_NOT_ON_SCREEN, ("Working...",))
                           , NavInsID.RIGHT_CLICK # Confirm
                           , NavInsID.BOTH_CLICK
                           ]
