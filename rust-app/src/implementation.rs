@@ -1,8 +1,8 @@
 use crate::interface::*;
 use crate::test_parsers::*;
+use crate::ui::*;
 use crate::utils::*;
 use arrayvec::ArrayVec;
-use core::fmt::Write;
 use ledger_crypto_helpers::common::{try_option, Address};
 use ledger_crypto_helpers::eddsa::{
     ed25519_public_key_bytes, eddsa_sign, with_public_keys, Ed25519RawPubKeyAddress,
@@ -14,7 +14,6 @@ use ledger_parser_combinators::endianness::*;
 use ledger_parser_combinators::interp_parser::{
     reject, Action, DefaultInterp, InterpParser, MoveAction, ParseResult, ParserCommon, SubInterp,
 };
-use ledger_prompts_ui::final_accept_prompt;
 
 use core::convert::TryFrom;
 use core::ops::Deref;
@@ -40,9 +39,7 @@ pub const fn get_address_impl<const PROMPT: bool>() -> GetAddressImplT {
                 with_public_keys(path, false, |key: &_, pkh: &PKH| {
                     try_option(|| -> Option<()> {
                         if PROMPT {
-                            scroller("Provide Public Key", |_w| Ok(()))?;
-                            scroller_paginated("Address", |w| Ok(write!(w, "{pkh}")?))?;
-                            final_accept_prompt(&[])?;
+                            confirm_address(pkh)?;
                         }
 
                         let rv = destination.insert(ArrayVec::new());
@@ -133,9 +130,6 @@ pub static SIGN_IMPL: SignImplT = Action(
             mkmvfn(
                 |mut hasher: Blake2b, destination: &mut Option<Zeroizing<Base64Hash<32>>>| {
                     let the_hash: Zeroizing<Base64Hash<32>> = hasher.finalize();
-                    scroller("Transaction hash", |w| {
-                        Ok(write!(w, "{}", &the_hash.deref())?)
-                    })?;
                     *destination = Some(the_hash);
                     Some(())
                 },
@@ -149,13 +143,6 @@ pub static SIGN_IMPL: SignImplT = Action(
                     if !path.starts_with(&BIP32_PREFIX[0..2]) {
                         return None;
                     }
-                    with_public_keys(&path, false, |_, pkh: &PKH| {
-                        try_option(|| -> Option<()> {
-                            scroller("Sign for Address", |w| Ok(write!(w, "{pkh}")?))?;
-                            Some(())
-                        }())
-                    })
-                    .ok()?;
                     *destination = Some(path);
                     Some(())
                 },
@@ -164,8 +151,12 @@ pub static SIGN_IMPL: SignImplT = Action(
     ),
     mkfn(
         |(hash, path): &(Option<Zeroizing<Base64Hash<32>>>, Option<ArrayVec<u32, 10>>),
-         destination: &mut _| {
-            final_accept_prompt(&["Sign Transaction?"])?;
+        destination: &mut _| {
+            with_public_keys(path.as_ref()?, false, |_, pkh: &PKH| {
+                try_option(|| -> Option<()> {
+                    confirm_sign_tx(pkh, hash.as_ref()?.deref())
+                }())
+            }).ok()?;
 
             // By the time we get here, we've approved and just need to do the signature.
             let sig = eddsa_sign(path.as_ref()?, false, &hash.as_ref()?.0[..]).ok()?;
