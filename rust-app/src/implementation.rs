@@ -151,12 +151,13 @@ pub static SIGN_IMPL: SignImplT = Action(
     ),
     mkfn(
         |(hash, path): &(Option<Zeroizing<Base64Hash<32>>>, Option<ArrayVec<u32, 10>>),
-        destination: &mut _| {
+         destination: &mut _| {
             with_public_keys(path.as_ref()?, false, |_, pkh: &PKH| {
                 try_option(|| -> Option<()> {
                     confirm_sign_tx(pkh, hash.as_ref()?.deref())
                 }())
-            }).ok()?;
+            })
+            .ok()?;
 
             // By the time we get here, we've approved and just need to do the signature.
             let sig = eddsa_sign(path.as_ref()?, false, &hash.as_ref()?.0[..]).ok()?;
