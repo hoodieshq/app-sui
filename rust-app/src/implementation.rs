@@ -1,4 +1,5 @@
 use crate::interface::*;
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 use crate::test_parsers::*;
 use crate::ui::*;
 use crate::utils::*;
@@ -176,6 +177,7 @@ pub enum ParsersState {
     NoState,
     GetAddressState(<GetAddressImplT as ParserCommon<Bip32Key>>::State),
     SignState(<SignImplT as ParserCommon<SignParameters>>::State),
+    #[cfg(not(any(target_os = "stax", target_os = "flex")))]
     TestParsersState(<TestParsersImplT as ParserCommon<TestParsersSchema>>::State),
 }
 
@@ -226,6 +228,7 @@ pub fn get_sign_state(
 }
 
 #[inline(never)]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub fn get_test_parsers_state(
     s: &mut ParsersState,
 ) -> &mut <TestParsersImplT as ParserCommon<TestParsersSchema>>::State {

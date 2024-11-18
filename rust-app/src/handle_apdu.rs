@@ -1,5 +1,6 @@
 use crate::implementation::*;
 use crate::interface::*;
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 use crate::test_parsers::*;
 
 use arrayvec::ArrayVec;
@@ -91,12 +92,15 @@ pub fn handle_apdu(comm: &mut io::Comm, ins: Ins, parser: &mut ParsersState) -> 
         Ins::Sign => {
             run_parser_apdu::<_, SignParameters>(parser, get_sign_state, &SIGN_IMPL, comm)?
         }
-        Ins::TestParsers => run_parser_apdu::<_, TestParsersSchema>(
-            parser,
-            get_test_parsers_state,
-            &test_parsers_parser(),
-            comm,
-        )?,
+        Ins::TestParsers => {
+            #[cfg(not(any(target_os = "stax", target_os = "flex")))]
+            run_parser_apdu::<_, TestParsersSchema>(
+                parser,
+                get_test_parsers_state,
+                &test_parsers_parser(),
+                comm,
+            )?;
+        },
         Ins::GetVersionStr => {
             comm.append(concat!("Alamgu Example ", env!("CARGO_PKG_VERSION")).as_ref());
         }
