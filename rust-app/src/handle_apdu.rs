@@ -1,6 +1,7 @@
 use crate::implementation::*;
 use crate::interface::*;
 use crate::settings::*;
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 use crate::test_parsers::*;
 use crate::utils::*;
 
