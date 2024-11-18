@@ -31,6 +31,7 @@ pub mod interface;
 pub mod utils;
 
 #[cfg(target_family = "bolos")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub mod test_parsers;
 
 #[cfg(target_family = "bolos")]
@@ -40,12 +41,14 @@ pub mod handle_apdu;
 pub mod implementation;
 
 #[cfg(target_family = "bolos")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub mod menu;
 
 #[cfg(target_family = "bolos")]
 pub mod settings;
 
 #[cfg(target_family = "bolos")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub mod main_nanos;
 
 #[cfg(target_family = "bolos")]
