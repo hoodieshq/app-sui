@@ -40,6 +40,9 @@ pub fn confirm_sign_tx(pkh: &Ed25519RawPubKeyAddress, hash: &Base64Hash<32>) -> 
         .blind()
         .titles("Sign Transaction", "", "")
         .show(&tx_fields);
+    NbglReviewStatus::new()
+        .status_type(StatusType::Transaction)
+        .show(success);
     if success {
         Some(())
     } else {
