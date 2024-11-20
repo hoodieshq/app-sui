@@ -63,3 +63,9 @@ icon = "crab-small.gif"
 
 [package.metadata.ledger.nanosplus]
 icon = "crab-small.gif"
+
+[package.metadata.ledger.stax]
+icon = "crab_32x32.gif"
+
+[package.metadata.ledger.flex]
+icon = "crab_40x40.gif"
