@@ -2,10 +2,10 @@ use crate::handle_apdu::handle_apdu;
 use crate::implementation::*;
 use crate::interface::*;
 use crate::settings::*;
+use crate::ui::APP_ICON;
 
-use include_gif::include_gif;
 use ledger_device_sdk::io;
-use ledger_device_sdk::nbgl::{init_comm, NbglGlyph, NbglHomeAndSettings};
+use ledger_device_sdk::nbgl::{init_comm, NbglHomeAndSettings};
 use ledger_log::{info, trace};
 
 #[allow(dead_code)]
@@ -24,8 +24,6 @@ pub fn app_main() {
         core::mem::size_of::<io::Comm>(),
         core::mem::size_of::<ParsersState>()
     );
-
-    const APP_ICON: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
 
     let settings_strings = [[
         "Blind Signing",
