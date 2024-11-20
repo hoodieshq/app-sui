@@ -100,7 +100,7 @@ pub fn handle_apdu(comm: &mut io::Comm, ins: Ins, parser: &mut ParsersState) -> 
                 &test_parsers_parser(),
                 comm,
             )?;
-        },
+        }
         Ins::GetVersionStr => {
             comm.append(concat!("Alamgu Example ", env!("CARGO_PKG_VERSION")).as_ref());
         }

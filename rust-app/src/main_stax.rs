@@ -39,9 +39,10 @@ pub fn app_main() {
             env!("CARGO_PKG_AUTHORS"),
         );
 
-    let mut menu = |states: &ParsersState| match states {
-        ParsersState::NoState => main_menu.show_and_return(),
-        _ => {}
+    let mut menu = |states: &ParsersState| {
+        if let ParsersState::NoState = states {
+            main_menu.show_and_return()
+        }
     };
 
     loop {
