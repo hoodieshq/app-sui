@@ -46,3 +46,5 @@ pub fn confirm_sign_tx(pkh: &Ed25519RawPubKeyAddress, hash: &Base64Hash<32>) -> 
         None
     }
 }
+
+pub fn warn_tx_not_recognized() {}
