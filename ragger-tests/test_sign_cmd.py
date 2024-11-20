@@ -21,20 +21,27 @@ def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
-        navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
-            , timeout=10
-            , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_short_tx"
-            , screen_change_before_first_instruction=False
-            , screen_change_after_last_instruction=False
-        )
+        if firmware.device.startswith("nano"):
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+                , timeout=10
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_short_tx"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=False
+            )
+        else:
+            # Dismiss the "Blind signing ahead" screen
+            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
+            scenario_navigator.review_approve()
 
     def check_result(result):
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
 
-    with blind_sign_enabled(navigator):
+    with blind_sign_enabled(firmware, navigator):
         run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
 def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
@@ -49,20 +56,27 @@ def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
-        navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
-            , timeout=10
-            , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_long_tx"
-            , screen_change_before_first_instruction=False
-            , screen_change_after_last_instruction=False
-        )
+        if firmware.device.startswith("nano"):
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+                , timeout=10
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_long_tx"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=False
+            )
+        else:
+            # Dismiss the "Blind signing ahead" screen
+            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
+            scenario_navigator.review_approve()
 
     def check_result(result):
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
 
-    with blind_sign_enabled(navigator):
+    with blind_sign_enabled(firmware, navigator):
         run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
 # Transaction signature refused test
@@ -77,21 +91,28 @@ def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
-        navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
-            , timeout=10
-            , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_refused"
-            , screen_change_before_first_instruction=False
-            , screen_change_after_last_instruction=False
-        )
+        if firmware.device.startswith("nano"):
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK]
+                , timeout=10
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_refused"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=False
+            )
+        else:
+            # Dismiss the "Blind signing ahead" screen
+            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
+            scenario_navigator.review_reject()
 
     def check_result(result):
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
 
     with pytest.raises(ExceptionRAPDU) as e:
-        with blind_sign_enabled(navigator):
+        with blind_sign_enabled(firmware, navigator):
             run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
     # Assert that we have received a refusal
@@ -99,16 +120,23 @@ def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
     assert len(e.value.data) == 0
 
 @contextmanager
-def blind_sign_enabled(navigator):
-    toggle_blind_sign(navigator)
+def blind_sign_enabled(firmware, navigator):
+    toggle_blind_sign(firmware, navigator)
     try:
         yield
     finally:
-        toggle_blind_sign(navigator)
+        toggle_blind_sign(firmware, navigator)
 
-def toggle_blind_sign(navigator):
-    navigator.navigate(
-        instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK, NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK, NavInsID.LEFT_CLICK, NavInsID.LEFT_CLICK]
-        , timeout=10
-        , screen_change_before_first_instruction=False
-    )
+def toggle_blind_sign(firmware, navigator):
+    if firmware.device.startswith("nano"):
+        navigator.navigate(
+            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK, NavInsID.BOTH_CLICK, NavInsID.RIGHT_CLICK, NavInsID.BOTH_CLICK, NavInsID.LEFT_CLICK, NavInsID.LEFT_CLICK]
+            , timeout=10
+            , screen_change_before_first_instruction=False
+        )
+    else:
+        navigator.navigate([NavInsID.USE_CASE_HOME_SETTINGS,
+                            NavIns(NavInsID.TOUCH, (200, 113)),
+                            NavInsID.USE_CASE_SUB_SETTINGS_EXIT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
