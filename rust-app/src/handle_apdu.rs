@@ -38,6 +38,7 @@ pub fn handle_apdu_async(io: HostIO, ins: Ins, settings: Settings) -> APDUsFutur
                 NoinlineFut(sign_apdu(io, settings)).await;
             }
             Ins::TestParsers => {
+                #[cfg(not(any(target_os = "stax", target_os = "flex")))]
                 NoinlineFut(test_parsers(io)).await;
             }
             Ins::GetVersionStr => {}
