@@ -6,7 +6,7 @@ use ledger_crypto_helpers::eddsa::Ed25519RawPubKeyAddress;
 use ledger_crypto_helpers::hasher::Base64Hash;
 use ledger_device_sdk::nbgl::*;
 
-pub const APP_ICON: NbglGlyph = NbglGlyph::from_include(include_gif!("crab_64x64.gif", NBGL));
+pub const APP_ICON: NbglGlyph = NbglGlyph::from_include(include_gif!("sui_64x64.gif", NBGL));
 
 pub fn confirm_address(pkh: &Ed25519RawPubKeyAddress) -> Option<()> {
     let success = NbglAddressReview::new()

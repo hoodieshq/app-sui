@@ -68,7 +68,7 @@ icon = "sui-small.gif"
 icon = "sui-small.gif"
 
 [package.metadata.ledger.stax]
-icon = "crab_32x32.gif"
+icon = "sui_32x32.gif"
 
 [package.metadata.ledger.flex]
-icon = "crab_40x40.gif"
+icon = "sui_40x40.gif"
