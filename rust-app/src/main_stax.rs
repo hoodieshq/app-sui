@@ -40,7 +40,7 @@ pub fn app_main() {
     info!(
         "State sizes\ncomm: {}\nstates: {}",
         core::mem::size_of::<io::Comm>(),
-        core::mem::size_of::<ParsersState>()
+        core::mem::size_of::<Option<APDUsFuture>>()
     );
 
     let settings_strings = [[
@@ -82,6 +82,7 @@ pub fn app_main() {
                 trace!("Replied");
             }
             Err(sw) => {
+                PinMut::as_mut(&mut states.0.borrow_mut()).set(None);
                 comm.borrow_mut().reply(sw);
             }
         };
