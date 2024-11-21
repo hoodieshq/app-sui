@@ -2,7 +2,7 @@
 
 set -eu
 
-for device in nanosplus nanox
+for device in nanosplus nanox flex stax
 do
     export DEVICE=$device
     nix-shell -A $DEVICE.rustShell --run ' \

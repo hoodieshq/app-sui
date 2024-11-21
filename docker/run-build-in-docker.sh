@@ -3,7 +3,7 @@ set -eu
 
 OUT_DIR=/app/docker-outputs
 
-for device in nanosplus nanox
+for device in nanosplus nanox flex stax
 do
     cd rust-app
     cargo ledger build $device
