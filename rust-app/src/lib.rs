@@ -36,16 +36,28 @@ pub mod interface;
 pub mod utils;
 
 #[cfg(target_family = "bolos")]
+pub mod handle_apdu;
+
+#[cfg(target_family = "bolos")]
 pub mod implementation;
 
 #[cfg(target_family = "bolos")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub mod menu;
 
 #[cfg(target_family = "bolos")]
 pub mod settings;
 
 #[cfg(target_family = "bolos")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
 pub mod main_nanos;
+
+#[cfg(target_family = "bolos")]
+pub mod ui;
+
+#[cfg(target_family = "bolos")]
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+pub mod main_stax;
 
 #[cfg(all(target_family = "bolos", test))]
 use core::panic::PanicInfo;

@@ -1,6 +1,6 @@
 use crate::interface::*;
 use crate::settings::*;
-use crate::utils::*;
+use crate::ui::*;
 use alamgu_async_block::*;
 use arrayvec::ArrayString;
 use arrayvec::ArrayVec;
@@ -9,11 +9,9 @@ use ledger_crypto_helpers::common::{try_option, Address, HexSlice};
 use ledger_crypto_helpers::eddsa::{ed25519_public_key_bytes, eddsa_sign, with_public_keys};
 use ledger_crypto_helpers::hasher::{Blake2b, Hasher, HexHash};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
-use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::bcs::async_parser::*;
 use ledger_parser_combinators::interp::*;
-use ledger_prompts_ui::final_accept_prompt;
 
 use core::convert::TryFrom;
 use core::future::Future;
@@ -71,9 +69,7 @@ pub async fn get_address_apdu(io: HostIO, prompt: bool) {
     if with_public_keys(&path, true, |key, address: &SuiPubKeyAddress| {
         try_option(|| -> Option<()> {
             if prompt {
-                scroller("Provide Public Key", |_w| Ok(()))?;
-                scroller_paginated("Address", |w| Ok(write!(w, "{address}")?))?;
-                final_accept_prompt(&[])?;
+                confirm_address(address)?;
             }
 
             let key_bytes = ed25519_public_key_bytes(key);
@@ -783,37 +779,4 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         }
     })
     .await
-}
-
-pub type APDUsFuture = impl Future<Output = ()>;
-
-#[inline(never)]
-pub fn handle_apdu_async(io: HostIO, ins: Ins, settings: Settings) -> APDUsFuture {
-    trace!("Constructing future");
-    async move {
-        trace!("Dispatching");
-        match ins {
-            Ins::GetVersion => {
-                const APP_NAME: &str = "sui";
-                let mut rv = ArrayVec::<u8, 220>::new();
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MINOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_PATCH").parse().unwrap());
-                let _ = rv.try_extend_from_slice(APP_NAME.as_bytes());
-                io.result_final(&rv).await;
-            }
-            Ins::VerifyAddress => {
-                NoinlineFut(get_address_apdu(io, true)).await;
-            }
-            Ins::GetPubkey => {
-                NoinlineFut(get_address_apdu(io, false)).await;
-            }
-            Ins::Sign => {
-                trace!("Handling sign");
-                NoinlineFut(sign_apdu(io, settings)).await;
-            }
-            Ins::GetVersionStr => {}
-            Ins::Exit => ledger_device_sdk::exit_app(0),
-        }
-    }
 }
