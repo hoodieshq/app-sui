@@ -59,7 +59,7 @@ pub fn confirm_sign_tx(
 
     let success = NbglReview::new()
         .glyph(&APP_ICON)
-        .titles("Transfer SUI", "", "")
+        .titles("Transfer SUI", "", "Sign Transaction?")
         .show(&tx_fields);
     if success {
         Some(())
@@ -77,7 +77,7 @@ pub fn confirm_blind_sign_tx(hash: &HexHash<32>) -> Option<()> {
     let success = NbglReview::new()
         .glyph(&APP_ICON)
         .blind()
-        .titles("Blind Sign Transaction", "", "")
+        .titles("Blind Sign Transaction", "", "Sign Transaction?")
         .show(&tx_fields);
     if success {
         Some(())
