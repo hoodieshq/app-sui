@@ -36,7 +36,7 @@ pub fn app_main() {
     // API calls.
     init_comm(&mut comm.borrow_mut());
 
-    info!("Alamgu Example {}", env!("CARGO_PKG_VERSION"));
+    info!("Sui {}", env!("CARGO_PKG_VERSION"));
     info!(
         "State sizes\ncomm: {}\nstates: {}",
         core::mem::size_of::<io::Comm>(),
@@ -52,7 +52,7 @@ pub fn app_main() {
         .glyph(&APP_ICON)
         .settings(settings.get_mut(), &settings_strings)
         .infos(
-            "Alamgu Example App",
+            "Sui",
             env!("CARGO_PKG_VERSION"),
             env!("CARGO_PKG_AUTHORS"),
         );
