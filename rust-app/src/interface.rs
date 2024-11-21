@@ -74,6 +74,40 @@ pub type AppId = ULEB128;
 #[allow(non_camel_case_types)]
 pub type SHA3_256_HASH = Array<Byte, 33>;
 
+pub type SuiAddressRaw = [u8; SUI_ADDRESS_LENGTH];
+
+pub struct SuiPubKeyAddress(ledger_device_sdk::ecc::ECPublicKey<65, 'E'>, SuiAddressRaw);
+
+use arrayvec::ArrayVec;
+use ledger_crypto_helpers::common::{Address, HexSlice};
+use ledger_crypto_helpers::eddsa::ed25519_public_key_bytes;
+use ledger_crypto_helpers::hasher::{Blake2b, Hasher};
+use ledger_device_sdk::io::SyscallError;
+
+impl Address<SuiPubKeyAddress, ledger_device_sdk::ecc::ECPublicKey<65, 'E'>> for SuiPubKeyAddress {
+    fn get_address(
+        key: &ledger_device_sdk::ecc::ECPublicKey<65, 'E'>,
+    ) -> Result<Self, SyscallError> {
+        let key_bytes = ed25519_public_key_bytes(key);
+        let mut tmp = ArrayVec::<u8, 33>::new();
+        let _ = tmp.try_push(0); // SIGNATURE_SCHEME_TO_FLAG['ED25519']
+        let _ = tmp.try_extend_from_slice(key_bytes);
+        let mut hasher: Blake2b = Hasher::new();
+        hasher.update(&tmp);
+        let hash: [u8; SUI_ADDRESS_LENGTH] = hasher.finalize();
+        Ok(SuiPubKeyAddress(key.clone(), hash))
+    }
+    fn get_binary_address(&self) -> &[u8] {
+        &self.1
+    }
+}
+
+impl core::fmt::Display for SuiPubKeyAddress {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "0x{}", HexSlice(&self.1))
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, TryFromPrimitive)]
 pub enum Ins {

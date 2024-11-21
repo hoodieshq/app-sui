@@ -1,48 +1,20 @@
 use crate::interface::*;
 use crate::settings::*;
 use crate::ui::*;
+use crate::utils::*;
 use alamgu_async_block::*;
-use arrayvec::ArrayString;
 use arrayvec::ArrayVec;
-use core::fmt::Write;
-use ledger_crypto_helpers::common::{try_option, Address, HexSlice};
+use ledger_crypto_helpers::common::{try_option, Address};
 use ledger_crypto_helpers::eddsa::{ed25519_public_key_bytes, eddsa_sign, with_public_keys};
 use ledger_crypto_helpers::hasher::{Blake2b, Hasher, HexHash};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
+use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::bcs::async_parser::*;
 use ledger_parser_combinators::interp::*;
 
 use core::convert::TryFrom;
 use core::future::Future;
-
-type SuiAddressRaw = [u8; SUI_ADDRESS_LENGTH];
-
-pub struct SuiPubKeyAddress(ledger_device_sdk::ecc::ECPublicKey<65, 'E'>, SuiAddressRaw);
-
-impl Address<SuiPubKeyAddress, ledger_device_sdk::ecc::ECPublicKey<65, 'E'>> for SuiPubKeyAddress {
-    fn get_address(
-        key: &ledger_device_sdk::ecc::ECPublicKey<65, 'E'>,
-    ) -> Result<Self, SyscallError> {
-        let key_bytes = ed25519_public_key_bytes(key);
-        let mut tmp = ArrayVec::<u8, 33>::new();
-        let _ = tmp.try_push(0); // SIGNATURE_SCHEME_TO_FLAG['ED25519']
-        let _ = tmp.try_extend_from_slice(key_bytes);
-        let mut hasher: Blake2b = Hasher::new();
-        hasher.update(&tmp);
-        let hash: [u8; SUI_ADDRESS_LENGTH] = hasher.finalize();
-        Ok(SuiPubKeyAddress(key.clone(), hash))
-    }
-    fn get_binary_address(&self) -> &[u8] {
-        &self.1
-    }
-}
-
-impl core::fmt::Display for SuiPubKeyAddress {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "0x{}", HexSlice(&self.1))
-    }
-}
 
 pub type BipParserImplT =
     impl AsyncParser<Bip32Key, ByteStream> + HasOutput<Bip32Key, Output = ArrayVec<u32, 10>>;
@@ -525,29 +497,6 @@ impl<BS: Clone + Readable> AsyncParser<TransactionKind, BS> for TransactionKind 
     }
 }
 
-fn get_amount_in_decimals(amount: u64) -> (u64, ArrayString<12>) {
-    let factor_pow = 9;
-    let factor = u64::pow(10, factor_pow);
-    let quotient = amount / factor;
-    let remainder = amount % factor;
-    let mut remainder_str: ArrayString<12> = ArrayString::new();
-    {
-        // Make a string for the remainder, containing at lease one zero
-        // So 1 SUI will be displayed as "1.0"
-        let mut rem = remainder;
-        for i in 0..factor_pow {
-            let f = u64::pow(10, factor_pow - i - 1);
-            let r = rem / f;
-            let _ = remainder_str.try_push(char::from(b'0' + r as u8));
-            rem %= f;
-            if rem == 0 {
-                break;
-            }
-        }
-    }
-    (quotient, remainder_str)
-}
-
 impl HasOutput<TransactionExpiration> for DefaultInterp {
     type Output = ();
 }
@@ -691,52 +640,21 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         }
 
         // Show prompts after all inputs have been parsed
-        if scroller("Transfer", |w| Ok(write!(w, "SUI")?)).is_none() {
-            reject::<()>(StatusWords::UserCancelled as u16).await;
-        };
-
         if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
-            try_option(|| -> Option<()> {
-                scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
-                Some(())
-            }())
+            try_option(confirm_sign_tx(
+                address,
+                recipient,
+                total_amount,
+                gas_budget,
+            ))
         })
         .ok()
         .is_none()
         {
             reject::<()>(StatusWords::UserCancelled as u16).await;
-        }
-
-        {
-            if Option::<()>::is_none(
-                &try {
-                    scroller_paginated("To", |w| Ok(write!(w, "0x{}", HexSlice(&recipient))?))?;
-
-                    let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
-                    scroller_paginated("Amount", |w| {
-                        Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
-                    })?;
-
-                    let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
-                    scroller("Max Gas", |w| {
-                        Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())?)
-                    })?
-                },
-            ) {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            }
-        }
-
-        if final_accept_prompt(&["Sign Transaction?"]).is_none() {
-            reject::<()>(StatusWords::UserCancelled as u16).await;
         };
-    } else if settings.get() == 0 {
-        scroller("WARNING", |w| {
-            Ok(write!(
-                w,
-                "Transaction not recognized, enable blind signing to sign unknown transactions"
-            )?)
-        });
+    } else if !settings.get_blind_sign() {
+        warn_tx_not_recognized();
         reject::<()>(SyscallError::NotSupported as u16).await;
     }
 
@@ -758,13 +676,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         let hash: HexHash<32> = hasher.finalize();
         if !known_txn {
             // Show prompts after all inputs have been parsed
-            if scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?)).is_none() {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            }
-            if scroller("Transaction Hash", |w| Ok(write!(w, "0x{hash}")?)).is_none() {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            };
-            if final_accept_prompt(&["Blind Sign Transaction?"]).is_none() {
+            if confirm_blind_sign_tx(&hash).is_none() {
                 reject::<()>(StatusWords::UserCancelled as u16).await;
             };
         }

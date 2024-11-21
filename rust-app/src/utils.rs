@@ -25,3 +25,28 @@ impl<F: Future> Future for NoinlineFut<F> {
         self.project().0.poll(cx)
     }
 }
+
+use arrayvec::ArrayString;
+
+pub fn get_amount_in_decimals(amount: u64) -> (u64, ArrayString<12>) {
+    let factor_pow = 9;
+    let factor = u64::pow(10, factor_pow);
+    let quotient = amount / factor;
+    let remainder = amount % factor;
+    let mut remainder_str: ArrayString<12> = ArrayString::new();
+    {
+        // Make a string for the remainder, containing at lease one zero
+        // So 1 SUI will be displayed as "1.0"
+        let mut rem = remainder;
+        for i in 0..factor_pow {
+            let f = u64::pow(10, factor_pow - i - 1);
+            let r = rem / f;
+            let _ = remainder_str.try_push(char::from(b'0' + r as u8));
+            rem %= f;
+            if rem == 0 {
+                break;
+            }
+        }
+    }
+    (quotient, remainder_str)
+}
