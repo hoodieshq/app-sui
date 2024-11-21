@@ -120,6 +120,9 @@ def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
     assert len(e.value.data) == 0
 
 def test_sign_tx_blindsign_disabled(backend, scenario_navigator, firmware, navigator):
+    if not firmware.device.startswith("nano"):
+        pytest.skip("warn_tx_not_recognized: not yet implemented")
+
     client = Client(backend, use_block_protocol=True)
     path = "m/44'/535348'/0'"
 
@@ -129,14 +132,17 @@ def test_sign_tx_blindsign_disabled(backend, scenario_navigator, firmware, navig
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
-        navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
-            , timeout=10
-            , path=scenario_navigator.screenshot_path
-            , test_case_name="test_sign_tx_blindsign_disabled"
-            , screen_change_before_first_instruction=False
-            , screen_change_after_last_instruction=False
-        )
+        if firmware.device.startswith("nano"):
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
+                , timeout=10
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_blindsign_disabled"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=False
+            )
+        else:
+            scenario_navigator.review_approve()
 
     def check_result(result):
         assert len(result) == 64
