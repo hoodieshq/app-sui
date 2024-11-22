@@ -79,6 +79,9 @@ pub fn confirm_blind_sign_tx(hash: &HexHash<32>) -> Option<()> {
         .blind()
         .titles("Blind Sign Transaction", "", "Sign Transaction?")
         .show(&tx_fields);
+    NbglReviewStatus::new()
+        .status_type(StatusType::Transaction)
+        .show(success);
     if success {
         Some(())
     } else {
