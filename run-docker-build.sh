@@ -23,7 +23,7 @@ for device in nanosplus nanox flex stax
 do
     cp rust-app/Cargo.toml $OUT_DIR/$device/
     cp rust-app/*.gif $OUT_DIR/$device/
-    nix-shell -A alamgu.perDevice.$device.rustShell --run "cd $OUT_DIR/$device; cargo ledger --use-prebuilt $APP_NAME --hex-next-to-json build $device"
+    nix-shell -A alamgu.perDevice.$device.rustShell --run "cd $OUT_DIR/$device; cargo ledger --use-prebuilt $APP_NAME build $device"
 done
 
 echo "Use the following commands to install app"
