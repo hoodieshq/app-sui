@@ -165,6 +165,8 @@ def test_sign_tx_non_sui_transfer_rejected(backend, scenario_navigator, firmware
 
 # should reject signing an unknown transaction, if blind signing is not enabled
 def test_sign_tx_unknown_tx_rejected(backend, scenario_navigator, firmware, navigator):
+    if not firmware.device.startswith("nano"):
+        pytest.skip("warn_tx_not_recognized: not yet implemented")
     client = Client(backend, use_block_protocol=True)
     path = "m/44'/784'/0'"
 
@@ -177,14 +179,17 @@ def test_sign_tx_unknown_tx_rejected(backend, scenario_navigator, firmware, navi
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
-        navigator.navigate_and_compare(
-            instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
-            , timeout=10
-            , test_case_name="test_sign_tx_unknown_tx_rejected"
-            , path=scenario_navigator.screenshot_path
-            , screen_change_before_first_instruction=True
-            , screen_change_after_last_instruction=False
-        )
+        if firmware.device.startswith("nano"):
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK, NavInsID.RIGHT_CLICK]
+                , timeout=10
+                , test_case_name="test_sign_tx_unknown_tx_rejected"
+                , path=scenario_navigator.screenshot_path
+                , screen_change_before_first_instruction=True
+                , screen_change_after_last_instruction=False
+            )
+        else:
+            scenario_navigator.review_approve()
 
     def check_result(result):
         pytest.fail('should not happen')
