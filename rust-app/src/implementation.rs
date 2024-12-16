@@ -28,7 +28,7 @@ pub const BIP_PATH_PARSER: BipParserImplT = SubInterp(DefaultInterp);
 pub const BIP32_PREFIX: [u32; 5] =
     ledger_device_sdk::ecc::make_bip32_path(b"m/44'/535348'/123'/0'/0'");
 
-pub async fn get_address_apdu(io: HostIO, prompt: bool) {
+pub async fn get_address_apdu(io: HostIO, ui: UserInterface, prompt: bool) {
     let input = match io.get_params::<1>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -45,7 +45,7 @@ pub async fn get_address_apdu(io: HostIO, prompt: bool) {
     if with_public_keys(&path, false, |key, pkh: &PKH| {
         try_option(|| -> Option<()> {
             if prompt {
-                confirm_address(pkh)?;
+                ui.confirm_address(pkh)?;
             }
             // Should return the format that the chain customarily uses for public keys; for
             // ed25519 that's usually r | s with no prefix, which isn't quite our internal
@@ -77,7 +77,7 @@ const fn hasher_parser(
     ObserveBytes(Hasher::new, Hasher::update, DropInterp)
 }
 
-pub async fn sign_apdu(io: HostIO, settings: Settings) {
+pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
     let mut input = match io.get_params::<2>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -102,10 +102,11 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
     if known_txn {
         // NYI
     } else if !settings.get_blind_sign() {
-        warn_tx_not_recognized();
+        ui.warn_tx_not_recognized();
         reject::<()>(SyscallError::NotSupported as u16).await;
     } else if with_public_keys(&path, false, |_, pkh: &PKH| {
-        confirm_sign_tx(pkh, hash.deref()).ok_or(CryptographyError::NoneError)
+        ui.confirm_sign_tx(pkh, hash.deref())
+            .ok_or(CryptographyError::NoneError)
     })
     .is_err()
     {

@@ -2,6 +2,7 @@ use crate::handle_apdu::*;
 use crate::interface::*;
 use crate::menu::*;
 use crate::settings::*;
+use crate::ui::UserInterface;
 
 use alamgu_async_block::*;
 
@@ -64,7 +65,7 @@ pub fn app_main() {
                     PinMut::as_mut(&mut states.0.borrow_mut()),
                     ins,
                     *hostio,
-                    |io, ins| handle_apdu_async(io, ins, idle_menu.settings),
+                    |io, ins| handle_apdu_async(io, ins, idle_menu.settings, UserInterface {}),
                 );
                 match poll_rv {
                     Ok(()) => {
