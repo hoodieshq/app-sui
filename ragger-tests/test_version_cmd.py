@@ -1,11 +1,20 @@
 import tomli
+from pathlib import Path
 from application_client.client import Client
 
 # In this test we check the behavior of the device when asked to provide the app version
 def test_version(backend):
+    cargo_path = Path("./rust-app/Cargo.toml")
 
-    with open("./rust-app/Cargo.toml", "rb") as f:
-        data = tomli.load(f)
+    if not cargo_path.exists():
+        cargo_path = Path("./Cargo.toml")
+
+    if not cargo_path.exists():
+        raise FileNotFoundError("Cargo.toml not found")
+
+    with open(cargo_path, "rb") as f:
+        return tomli.load(f)
+
     version = (tuple(map(int, data['package']['version'].split('.'))), "sui")
     # Use the app interface instead of raw interface
     client = Client(backend, use_block_protocol=True)

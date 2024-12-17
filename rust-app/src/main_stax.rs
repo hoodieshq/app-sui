@@ -1,7 +1,7 @@
 use crate::handle_apdu::*;
 use crate::interface::*;
 use crate::settings::*;
-use crate::ui::APP_ICON;
+use crate::ui::{UserInterface, APP_ICON};
 
 use alamgu_async_block::*;
 
@@ -48,18 +48,26 @@ pub fn app_main() {
         "Sign transactions for which details cannot be verified",
     ]];
 
-    let mut main_menu = NbglHomeAndSettings::new()
-        .glyph(&APP_ICON)
-        .settings(settings.get_mut(), &settings_strings)
-        .infos(
-            "Sui",
-            env!("CARGO_PKG_VERSION"),
-            env!("CARGO_PKG_AUTHORS"),
-        );
+    let main_menu = SingleThreaded(RefCell::new(
+        NbglHomeAndSettings::new()
+            .glyph(&APP_ICON)
+            .settings(settings.get_mut(), &settings_strings)
+            .infos(
+                "Sui",
+                env!("CARGO_PKG_VERSION"),
+                env!("CARGO_PKG_AUTHORS"),
+            ),
+    ));
+    let do_refresh_val = true;
+    let do_refresh = SingleThreaded(RefCell::new(do_refresh_val));
+    let ui = UserInterface {
+        main_menu: unsafe { core::mem::transmute(&main_menu.0) },
+        do_refresh: unsafe { core::mem::transmute(&do_refresh.0) },
+    };
 
-    let mut menu = |states: core::cell::Ref<'_, Option<APDUsFuture>>| {
+    let menu = |states: core::cell::Ref<'_, Option<APDUsFuture>>| {
         if states.is_none() {
-            main_menu.show_and_return()
+            ui.show_main_menu()
         }
     };
 
@@ -73,7 +81,7 @@ pub fn app_main() {
             PinMut::as_mut(&mut states.0.borrow_mut()),
             ins,
             *hostio,
-            |io, ins| handle_apdu_async(io, ins, settings),
+            |io, ins| handle_apdu_async(io, ins, settings, ui),
         );
         match poll_rv {
             Ok(()) => {

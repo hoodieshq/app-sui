@@ -5,48 +5,54 @@ use ledger_crypto_helpers::common::HexSlice;
 use ledger_crypto_helpers::hasher::HexHash;
 use ledger_prompts_ui::*;
 
-pub fn confirm_address(address: &SuiPubKeyAddress) -> Option<()> {
-    scroller("Provide Public Key", |_w| Ok(()))?;
-    scroller_paginated("Address", |w| Ok(write!(w, "{address}")?))?;
-    final_accept_prompt(&[])
-}
+#[derive(Copy, Clone)]
+pub struct UserInterface {}
 
-pub fn confirm_sign_tx(
-    address: &SuiPubKeyAddress,
-    recipient: [u8; 32],
-    total_amount: u64,
-    gas_budget: u64,
-) -> Option<()> {
-    scroller("Transfer", |w| Ok(write!(w, "SUI")?))?;
+impl UserInterface {
+    pub fn confirm_address(&self, address: &SuiPubKeyAddress) -> Option<()> {
+        scroller("Provide Public Key", |_w| Ok(()))?;
+        scroller_paginated("Address", |w| Ok(write!(w, "{address}")?))?;
+        final_accept_prompt(&[])
+    }
 
-    scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
-    scroller_paginated("To", |w| Ok(write!(w, "0x{}", HexSlice(&recipient))?))?;
+    pub fn confirm_sign_tx(
+        &self,
+        address: &SuiPubKeyAddress,
+        recipient: [u8; 32],
+        total_amount: u64,
+        gas_budget: u64,
+    ) -> Option<()> {
+        scroller("Transfer", |w| Ok(write!(w, "SUI")?))?;
 
-    let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
-    scroller_paginated("Amount", |w| {
-        Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
-    })?;
+        scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
+        scroller_paginated("To", |w| Ok(write!(w, "0x{}", HexSlice(&recipient))?))?;
 
-    let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
-    scroller("Max Gas", |w| {
-        Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())?)
-    })?;
-    final_accept_prompt(&["Sign Transaction?"])
-}
+        let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
+        scroller_paginated("Amount", |w| {
+            Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
+        })?;
 
-pub fn confirm_blind_sign_tx(hash: &HexHash<32>) -> Option<()> {
-    scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?))?;
-    scroller("Transaction Hash", |w| Ok(write!(w, "0x{hash}")?))?;
-    final_accept_prompt(&["Blind Sign Transaction?"])
-}
+        let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
+        scroller("Max Gas", |w| {
+            Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())?)
+        })?;
+        final_accept_prompt(&["Sign Transaction?"])
+    }
 
-pub fn warn_tx_not_recognized() {
-    scroller("WARNING", |w| {
-        Ok(write!(
-            w,
-            "Transaction not recognized, enable blind signing to sign unknown transactions"
-        )?)
-    });
+    pub fn confirm_blind_sign_tx(&self, hash: &HexHash<32>) -> Option<()> {
+        scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?))?;
+        scroller("Transaction Hash", |w| Ok(write!(w, "0x{hash}")?))?;
+        final_accept_prompt(&["Blind Sign Transaction?"])
+    }
+
+    pub fn warn_tx_not_recognized(&self) {
+        scroller("WARNING", |w| {
+            Ok(write!(
+                w,
+                "Transaction not recognized, enable blind signing to sign unknown transactions"
+            )?)
+        });
+    }
 }
 
 #[cfg(not(target_os = "nanos"))]

@@ -1,6 +1,7 @@
 use crate::implementation::*;
 use crate::interface::*;
 use crate::settings::*;
+use crate::ui::UserInterface;
 use crate::utils::*;
 
 use alamgu_async_block::*;
@@ -11,7 +12,12 @@ use ledger_log::trace;
 pub type APDUsFuture = impl Future<Output = ()>;
 
 #[inline(never)]
-pub fn handle_apdu_async(io: HostIO, ins: Ins, settings: Settings) -> APDUsFuture {
+pub fn handle_apdu_async(
+    io: HostIO,
+    ins: Ins,
+    settings: Settings,
+    ui: UserInterface,
+) -> APDUsFuture {
     trace!("Constructing future");
     async move {
         trace!("Dispatching");
@@ -26,14 +32,14 @@ pub fn handle_apdu_async(io: HostIO, ins: Ins, settings: Settings) -> APDUsFutur
                 io.result_final(&rv).await;
             }
             Ins::VerifyAddress => {
-                NoinlineFut(get_address_apdu(io, true)).await;
+                NoinlineFut(get_address_apdu(io, ui, true)).await;
             }
             Ins::GetPubkey => {
-                NoinlineFut(get_address_apdu(io, false)).await;
+                NoinlineFut(get_address_apdu(io, ui, false)).await;
             }
             Ins::Sign => {
                 trace!("Handling sign");
-                NoinlineFut(sign_apdu(io, settings)).await;
+                NoinlineFut(sign_apdu(io, settings, ui)).await;
             }
             Ins::GetVersionStr => {}
             Ins::Exit => ledger_device_sdk::exit_app(0),

@@ -24,7 +24,7 @@ pub const BIP_PATH_PARSER: BipParserImplT = SubInterp(DefaultInterp);
 pub const BIP32_PREFIX: [u32; 5] =
     ledger_device_sdk::ecc::make_bip32_path(b"m/44'/784'/123'/0'/0'");
 
-pub async fn get_address_apdu(io: HostIO, prompt: bool) {
+pub async fn get_address_apdu(io: HostIO, ui: UserInterface, prompt: bool) {
     let input = match io.get_params::<1>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -41,7 +41,7 @@ pub async fn get_address_apdu(io: HostIO, prompt: bool) {
     if with_public_keys(&path, true, |key, address: &SuiPubKeyAddress| {
         try_option(|| -> Option<()> {
             if prompt {
-                confirm_address(address)?;
+                ui.confirm_address(address)?;
             }
 
             let key_bytes = ed25519_public_key_bytes(key);
@@ -611,7 +611,7 @@ const fn tx_parser<BS: Clone + Readable>() -> impl AsyncParser<IntentMessage, BS
     Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
 
-pub async fn sign_apdu(io: HostIO, settings: Settings) {
+pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
     let mut input = match io.get_params::<2>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -641,7 +641,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
 
         // Show prompts after all inputs have been parsed
         if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
-            try_option(confirm_sign_tx(
+            try_option(ui.confirm_sign_tx(
                 address,
                 recipient,
                 total_amount,
@@ -654,7 +654,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
             reject::<()>(StatusWords::UserCancelled as u16).await;
         };
     } else if !settings.get_blind_sign() {
-        warn_tx_not_recognized();
+        ui.warn_tx_not_recognized();
         reject::<()>(SyscallError::NotSupported as u16).await;
     }
 
@@ -676,7 +676,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings) {
         let hash: HexHash<32> = hasher.finalize();
         if !known_txn {
             // Show prompts after all inputs have been parsed
-            if confirm_blind_sign_tx(&hash).is_none() {
+            if ui.confirm_blind_sign_tx(&hash).is_none() {
                 reject::<()>(StatusWords::UserCancelled as u16).await;
             };
         }

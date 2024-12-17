@@ -129,8 +129,6 @@ def test_sign_tx_refused(backend, scenario_navigator, firmware, navigator):
 
 # should reject signing a non-SUI coin transaction, if blind signing is not enabled
 def test_sign_tx_non_sui_transfer_rejected(backend, scenario_navigator, firmware, navigator):
-    if not firmware.device.startswith("nano"):
-        pytest.skip("warn_tx_not_recognized: not yet implemented")
     client = Client(backend, use_block_protocol=True)
     path = "m/44'/784'/0'"
 
@@ -153,7 +151,10 @@ def test_sign_tx_non_sui_transfer_rejected(backend, scenario_navigator, firmware
                 , screen_change_after_last_instruction=False
             )
         else:
-            scenario_navigator.review_approve()
+            # Dismiss the "Enable Blind signing" screen
+            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
 
     def check_result(result):
         pytest.fail('should not happen')
@@ -165,8 +166,6 @@ def test_sign_tx_non_sui_transfer_rejected(backend, scenario_navigator, firmware
 
 # should reject signing an unknown transaction, if blind signing is not enabled
 def test_sign_tx_unknown_tx_rejected(backend, scenario_navigator, firmware, navigator):
-    if not firmware.device.startswith("nano"):
-        pytest.skip("warn_tx_not_recognized: not yet implemented")
     client = Client(backend, use_block_protocol=True)
     path = "m/44'/784'/0'"
 
@@ -189,7 +188,10 @@ def test_sign_tx_unknown_tx_rejected(backend, scenario_navigator, firmware, navi
                 , screen_change_after_last_instruction=False
             )
         else:
-            scenario_navigator.review_approve()
+            # Dismiss the "Enable Blind signing" screen
+            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
+                            screen_change_before_first_instruction=False,
+                            screen_change_after_last_instruction=False)
 
     def check_result(result):
         pytest.fail('should not happen')
