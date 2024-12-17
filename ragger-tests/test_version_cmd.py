@@ -13,7 +13,7 @@ def test_version(backend):
         raise FileNotFoundError("Cargo.toml not found")
 
     with open(cargo_path, "rb") as f:
-        return tomli.load(f)
+        data = tomli.load(f)
 
     version = (tuple(map(int, data['package']['version'].split('.'))), "sui")
     # Use the app interface instead of raw interface
