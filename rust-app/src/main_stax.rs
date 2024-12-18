@@ -52,11 +52,7 @@ pub fn app_main() {
         NbglHomeAndSettings::new()
             .glyph(&APP_ICON)
             .settings(settings.get_mut(), &settings_strings)
-            .infos(
-                "Sui",
-                env!("CARGO_PKG_VERSION"),
-                env!("CARGO_PKG_AUTHORS"),
-            ),
+            .infos("Sui", env!("CARGO_PKG_VERSION"), env!("CARGO_PKG_AUTHORS")),
     ));
     let do_refresh_val = true;
     let do_refresh = SingleThreaded(RefCell::new(do_refresh_val));

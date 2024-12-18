@@ -641,12 +641,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
 
         // Show prompts after all inputs have been parsed
         if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
-            try_option(ui.confirm_sign_tx(
-                address,
-                recipient,
-                total_amount,
-                gas_budget,
-            ))
+            try_option(ui.confirm_sign_tx(address, recipient, total_amount, gas_budget))
         })
         .ok()
         .is_none()
