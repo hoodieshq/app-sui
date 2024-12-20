@@ -59,8 +59,4 @@ def run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result):
 
     except Exception as e:
         print("DEBUG: run_apdu_and_nav_tasks_concurrently, Exception")
-        # Cancel both tasks
-        future_apdu.cancel()
-        future_nav.cancel()
-        pytest.fail("Exception raised")
-        executor.shutdown()
+        raise

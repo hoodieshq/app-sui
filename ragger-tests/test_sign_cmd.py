@@ -160,8 +160,8 @@ def blind_sign_enabled(firmware, navigator):
         yield
     except:
         # Don't re-enable if we hit an exception
-        pass
-    finally:
+        raise
+    else:
         toggle_blind_sign(firmware, navigator)
 
 def toggle_blind_sign(firmware, navigator):
