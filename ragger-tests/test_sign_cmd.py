@@ -36,10 +36,9 @@ def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
                 instructions=[NavInsID.USE_CASE_CHOICE_REJECT]
                 , timeout=20
                 , path=scenario_navigator.screenshot_path
-                , test_case_name="test_sign_tx_short_tx"
+                , test_case_name="test_sign_tx_short_tx_1"
                 , screen_change_before_first_instruction=True
                 , screen_change_after_last_instruction=True
-                , snap_start_idx=100
             )
             # Below is similar to scenario_navigator.review_approve()
             # But screen_change_before_first_instruction=True causes hang
@@ -49,7 +48,7 @@ def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
                 , text="^Hold to sign$"
                 , timeout=20
                 , path=scenario_navigator.screenshot_path
-                , test_case_name="test_sign_tx_short_tx"
+                , test_case_name="test_sign_tx_short_tx_2"
                 , screen_change_before_first_instruction=False
                 , screen_change_after_last_instruction=True
             )
@@ -88,10 +87,9 @@ def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
                 instructions=[NavInsID.USE_CASE_CHOICE_REJECT]
                 , timeout=20
                 , path=scenario_navigator.screenshot_path
-                , test_case_name="test_sign_tx_long_tx"
+                , test_case_name="test_sign_tx_long_tx_1"
                 , screen_change_before_first_instruction=True
                 , screen_change_after_last_instruction=True
-                , snap_start_idx=100
             )
             # Below is similar to scenario_navigator.review_approve()
             # But screen_change_before_first_instruction=True causes hang
@@ -101,7 +99,7 @@ def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
                 , text="^Hold to sign$"
                 , timeout=20
                 , path=scenario_navigator.screenshot_path
-                , test_case_name="test_sign_tx_long_tx"
+                , test_case_name="test_sign_tx_long_tx_2"
                 , screen_change_before_first_instruction=False
                 , screen_change_after_last_instruction=True
             )
