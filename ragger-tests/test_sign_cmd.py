@@ -32,10 +32,26 @@ def test_sign_tx_short_tx(backend, scenario_navigator, firmware, navigator):
             )
         else:
             # Dismiss the "Blind signing ahead" screen
-            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
-                            screen_change_before_first_instruction=False,
-                            screen_change_after_last_instruction=False)
-            scenario_navigator.review_approve()
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.USE_CASE_CHOICE_REJECT]
+                , timeout=20
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_short_tx_1"
+                , screen_change_before_first_instruction=True
+                , screen_change_after_last_instruction=True
+            )
+            # Below is similar to scenario_navigator.review_approve()
+            # But screen_change_before_first_instruction=True causes hang
+            navigator.navigate_until_text_and_compare(
+                navigate_instruction=NavInsID.SWIPE_CENTER_TO_LEFT
+                , validation_instructions=[NavInsID.USE_CASE_REVIEW_CONFIRM, NavInsID.USE_CASE_STATUS_DISMISS]
+                , text="^Hold to sign$"
+                , timeout=20
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_short_tx_2"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=True
+            )
 
     def check_result(result):
         assert len(result) == 64
@@ -67,10 +83,26 @@ def test_sign_tx_long_tx(backend, scenario_navigator, firmware, navigator):
             )
         else:
             # Dismiss the "Blind signing ahead" screen
-            navigator.navigate([NavInsID.USE_CASE_CHOICE_REJECT],
-                            screen_change_before_first_instruction=False,
-                            screen_change_after_last_instruction=False)
-            scenario_navigator.review_approve()
+            navigator.navigate_and_compare(
+                instructions=[NavInsID.USE_CASE_CHOICE_REJECT]
+                , timeout=20
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_long_tx_1"
+                , screen_change_before_first_instruction=True
+                , screen_change_after_last_instruction=True
+            )
+            # Below is similar to scenario_navigator.review_approve()
+            # But screen_change_before_first_instruction=True causes hang
+            navigator.navigate_until_text_and_compare(
+                navigate_instruction=NavInsID.SWIPE_CENTER_TO_LEFT
+                , validation_instructions=[NavInsID.USE_CASE_REVIEW_CONFIRM, NavInsID.USE_CASE_STATUS_DISMISS]
+                , text="^Hold to sign$"
+                , timeout=20
+                , path=scenario_navigator.screenshot_path
+                , test_case_name="test_sign_tx_long_tx_2"
+                , screen_change_before_first_instruction=False
+                , screen_change_after_last_instruction=True
+            )
 
     def check_result(result):
         assert len(result) == 64
@@ -159,7 +191,10 @@ def blind_sign_enabled(firmware, navigator):
     toggle_blind_sign(firmware, navigator)
     try:
         yield
-    finally:
+    except:
+        # Don't re-enable if we hit an exception
+        raise
+    else:
         toggle_blind_sign(firmware, navigator)
 
 def toggle_blind_sign(firmware, navigator):
@@ -173,5 +208,6 @@ def toggle_blind_sign(firmware, navigator):
         navigator.navigate([NavInsID.USE_CASE_HOME_SETTINGS,
                             NavIns(NavInsID.TOUCH, (200, 113)),
                             NavInsID.USE_CASE_SUB_SETTINGS_EXIT],
+                            timeout=10,
                             screen_change_before_first_instruction=False,
                             screen_change_after_last_instruction=False)
