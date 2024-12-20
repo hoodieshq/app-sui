@@ -124,6 +124,9 @@ def blind_sign_enabled(firmware, navigator):
     toggle_blind_sign(firmware, navigator)
     try:
         yield
+    except:
+        # Don't re-enable if we hit an exception
+        pass
     finally:
         toggle_blind_sign(firmware, navigator)
 
@@ -138,5 +141,6 @@ def toggle_blind_sign(firmware, navigator):
         navigator.navigate([NavInsID.USE_CASE_HOME_SETTINGS,
                             NavIns(NavInsID.TOUCH, (200, 113)),
                             NavInsID.USE_CASE_SUB_SETTINGS_EXIT],
+                            timeout=10,
                             screen_change_before_first_instruction=False,
                             screen_change_after_last_instruction=False)
