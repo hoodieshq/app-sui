@@ -30,7 +30,6 @@ cd rust-app/
 cargo ledger build -l $DEVICE
 ````
 where `DEVICE` is one of
- - `nanos` for Nano S
  - `nanox` for Nano X
  - `nanosplus` for Nano S+
 
@@ -70,7 +69,7 @@ Nix will always track the latest changes, freshly rebuilding components as neede
 That said, it is also possible to use Cargo build.
 This useful for the quickest "debug loop".
 
-The [cargo-ledger](https://github.com/LedgerHQ/cargo-ledger.git) builds, outputs a `hex` file and a manifest file for `ledgerctl`, and loads it on a device in a single `cargo-ledger ledger -l nanos` command in the rust-app folder within app directory.
+The [cargo-ledger](https://github.com/LedgerHQ/cargo-ledger.git) builds, outputs a `hex` file and a manifest file for `ledgerctl`, and loads it on a device in a single `cargo-ledger ledger -l nanosplus` command in the rust-app folder within app directory.
 
 (You do not need to install `cargo-ledger` if you are using the nix-provided development shell, as it provides it.)
 
