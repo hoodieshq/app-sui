@@ -14,9 +14,9 @@ These dependencies are needed:
 
 Additionally for testing these are needed:
 
- - Node
- - Yarn
+ - Python3
  - [Speculos] the official Ledger emulator
+ - Ragger, a library to run tests on Speculos emulator
 
 [Speculos]: https://github.com/ledgerHQ/speculos
 
@@ -27,11 +27,13 @@ The easiest way to get all these dependencies is with Nix:
 ```bash
 nix-shell -A $DEVICE.rustShell
 cd rust-app/
-cargo ledger build -l $DEVICE
+cargo build --release --target=$TARGET_JSON
 ````
 where `DEVICE` is one of
  - `nanox` for Nano X
  - `nanosplus` for Nano S+
+ - `flex`, for Flex
+ - `stax`, for Stax
 
 ### Getting a development environment without Nix
 
@@ -53,12 +55,10 @@ in order to regenerate this file and keep it up to date.
 
 ## Running automated tests with Speculos
 
-Using Nix, from the root level of this repo, run:
+Using Nix, from the root level of this repo, run the following script to run tests for all devices
 
 ```bash
-nix-shell -A $DEVICE.rustShell
-cd rust-app/
-cargo test --target=$TARGET_JSON
+./run-ragger-tests.sh
 ```
 
 ## Deploying development builds to real hardware
