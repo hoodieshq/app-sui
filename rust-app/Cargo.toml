@@ -58,9 +58,6 @@ path = ["44'/535348'"]
 curve = ["ed25519"]
 flags = "0"
 
-[package.metadata.ledger.nanos]
-icon = "crab.gif"
-
 [package.metadata.ledger.nanox]
 icon = "crab-small.gif"
 

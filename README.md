@@ -14,9 +14,10 @@ Tools are built from source but with cached builds, so ramp up is easy --- just 
 ## Device Compatability
 
 This application is compatible with
-- Ledger Nano S, running firmware 2.1.0 and above
-- Ledger Nano S+, running firmware 1.1.0
+- Ledger Nano S+
 - Ledger Nano X
+- Ledger Flex
+- Ledger Stax
 
 Note: Compatibility with Ledger Nano X is only possible to check on [Speculos](https://github.com/ledgerHQ/speculos/) emulator,
 because the Nano X does not support side-loading apps under development.
@@ -79,9 +80,10 @@ Finally, run the following command to load the app on your device:
 nix --extra-experimental-features nix-command run -f . $DEVICE.loadApp
 ```
 where `DEVICE` is one of
- - `nanos`, for Nano S
  - `nanox`, for Nano X
  - `nanosplus`, for Nano S+
+ - `flex`, for Flex
+ - `stax`, for Stax
 
 The app will be downloaded (if you have our Nix cache enabled) and/or freshly built as needed.
 
@@ -102,9 +104,10 @@ To build one, run:
 nix-build -A $DEVICE.tarball
 ```
 where `DEVICE` is one of
- - `nanos`, for Nano S
  - `nanox`, for Nano X
  - `nanosplus`, for Nano S+
+ - `flex`, for Flex
+ - `stax`, for Stax
 
 The last line printed out will be the path of the tarball.
 
@@ -146,9 +149,10 @@ To use this tool using Nix, from the root level of this repo, run this command t
 nix-shell -A $DEVICE.appShell
 ```
 where `DEVICE` is one of
- - `nanos`, for Nano S
  - `nanox`, for Nano X
  - `nanosplus`, for Nano S+
+ - `flex`, for Flex
+ - `stax`, for Stax
 
 Then, one can use `generic-cli` like this:
 
