@@ -60,6 +60,9 @@ pub mod ui;
 #[cfg(any(target_os = "stax", target_os = "flex"))]
 pub mod main_stax;
 
+#[cfg(target_family = "bolos")]
+pub mod swap;
+
 #[cfg(all(target_family = "bolos", test))]
 use core::panic::PanicInfo;
 /// In case of runtime problems, return an internal error and exit the app
