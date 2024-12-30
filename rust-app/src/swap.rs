@@ -1,17 +1,14 @@
+use core::fmt::Write;
 use core::mem;
 use core::str;
-use core::fmt::Write;
 
 use arrayvec::ArrayString;
 use get_params::CheckAddressParams;
 use get_params::CreateTxParams;
 use get_params::PrintableAmountParams;
-use ledger_crypto_helpers::{
-    common::CryptographyError,
-    eddsa::with_public_keys,
-};
-use ledger_device_sdk::libcall::string::CustomString;
+use ledger_crypto_helpers::{common::CryptographyError, eddsa::with_public_keys};
 use ledger_device_sdk::libcall::string::uint256_to_float;
+use ledger_device_sdk::libcall::string::CustomString;
 
 use ledger_log::trace;
 
@@ -24,7 +21,7 @@ const BIP32_PATH_SEGMENT_LEN: usize = mem::size_of::<u32>();
 
 #[derive(Debug)]
 pub enum Error {
-    DecodeDPathError(& 'static str),
+    DecodeDPathError(&'static str),
     CryptographyError(CryptographyError),
     BadAddressASCII,
 }
@@ -41,9 +38,7 @@ fn unpack_path(buf: &[u8], out_path: &mut [u32]) -> Result<(), Error> {
     }
 
     for i in (0..buf.len()).step_by(BIP32_PATH_SEGMENT_LEN) {
-        let path_seg = u32::from_be_bytes(
-            [buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]
-        );
+        let path_seg = u32::from_be_bytes([buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]);
 
         out_path[i / BIP32_PATH_SEGMENT_LEN] = path_seg;
     }
@@ -56,9 +51,12 @@ fn address_to_str(address: &[u8]) -> Result<&str, Error> {
 }
 
 pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
-    let mut dpath_buf =  [0u32; MAX_BIP32_PATH_LENGTH];
+    let mut dpath_buf = [0u32; MAX_BIP32_PATH_LENGTH];
     let dpath_len = params.dpath_len;
-    unpack_path(&params.dpath[.. dpath_len * BIP32_PATH_SEGMENT_LEN], &mut dpath_buf)?;
+    unpack_path(
+        &params.dpath[..dpath_len * BIP32_PATH_SEGMENT_LEN],
+        &mut dpath_buf,
+    )?;
     let dpath = &dpath_buf[..dpath_len];
 
     let ref_addr = address_to_str(&params.ref_address[..params.ref_address_len])?;
