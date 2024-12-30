@@ -4,15 +4,16 @@ use crate::menu::*;
 use crate::settings::*;
 use crate::ui::UserInterface;
 use crate::swap;
+use crate::swap::get_params::my_get_check_address_params;
+use crate::swap::get_params::my_get_printable_amount_params;
+use crate::swap::get_params::my_sign_tx_params;
+use crate::swap::get_params::swap_return;
+use crate::swap::get_params::SwapResult;
 
 use alamgu_async_block::*;
 
 use ledger_device_sdk::io;
 use ledger_device_sdk::libcall;
-use ledger_device_sdk::libcall::swap::SwapResult;
-use ledger_device_sdk::libcall::swap::{
-    get_check_address_params, get_printable_amount_params, sign_tx_params, swap_return,
-};
 use ledger_device_sdk::libcall::LibCallCommand;
 use ledger_device_sdk::uxapp::{UxEvent, BOLOS_UX_OK};
 use ledger_log::{info, trace};
@@ -153,9 +154,22 @@ impl<T> core::ops::DerefMut for SingleThreaded<T> {
 pub fn lib_main(arg0: u32) {
     let cmd = libcall::get_command(arg0);
 
+    match &cmd {
+        LibCallCommand::SwapSignTransaction => {
+            trace!("lib_main: SwapSignTransaction");
+        }
+        LibCallCommand::SwapGetPrintableAmount => {
+            trace!("lib_main: SwapGetPrintableAmount");
+        }
+        LibCallCommand::SwapCheckAddress => {
+            trace!("lib_main: SwapCheckAddress");
+        }
+    }
+
     match cmd {
         LibCallCommand::SwapCheckAddress => {
-            let mut params = get_check_address_params(arg0);
+            let mut params = my_get_check_address_params(arg0);
+            trace!("{:X?}", params);
             let is_matched = swap::check_address(&mut params).unwrap();
 
             swap_return(SwapResult::CheckAddressResult(
@@ -164,7 +178,8 @@ pub fn lib_main(arg0: u32) {
             ));
         }
         LibCallCommand::SwapGetPrintableAmount => {
-            let mut params = get_printable_amount_params(arg0);
+            let mut params = my_get_printable_amount_params(arg0);
+            trace!("{:X?}", params);
             let amount_str = swap::get_printable_amount(&mut params).unwrap();
 
             swap_return(SwapResult::PrintableAmountResult(
@@ -173,7 +188,8 @@ pub fn lib_main(arg0: u32) {
             ));
         }
         LibCallCommand::SwapSignTransaction => {
-            let mut params = sign_tx_params(arg0);
+            let mut params = my_sign_tx_params(arg0);
+            trace!("{:X?}", params);
             let res = swap::sign_transaction(&mut params).unwrap();
 
             swap_return(SwapResult::CreateTxResult(&mut params, res));
