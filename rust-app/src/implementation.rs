@@ -23,7 +23,10 @@ use zeroize::Zeroizing;
 #[allow(clippy::upper_case_acronyms)]
 type PKH = Ed25519RawPubKeyAddress;
 
-pub type GetAddressImplT = impl InterpParser<Bip32Key, Returning = ArrayVec<u8, 128>>;
+pub type GetAddressImplT = Action<
+    SubInterp<DefaultInterp>,
+    fn(&ArrayVec<u32, 10>, &mut Option<ArrayVec<u8, 128>>) -> Option<()>,
+>;
 
 // Need a path of length 5, as make_bip32_path panics with smaller paths
 pub const BIP32_PREFIX: [u32; 5] =
@@ -67,7 +70,22 @@ pub const fn get_address_impl<const PROMPT: bool>() -> GetAddressImplT {
     )
 }
 
-pub type SignImplT = impl InterpParser<SignParameters, Returning = ArrayVec<u8, 128>>;
+pub type SignImplT = Action<
+    (
+        MoveAction<
+            HashDArrayAndDrop,
+            fn(Blake2b, &mut Option<Zeroizing<Base64Hash<32>>>) -> Option<()>,
+        >,
+        MoveAction<
+            SubInterp<DefaultInterp>,
+            fn(ArrayVec<u32, 10>, &mut Option<ArrayVec<u32, 10>>) -> Option<()>,
+        >,
+    ),
+    fn(
+        &(Option<Zeroizing<Base64Hash<32>>>, Option<ArrayVec<u32, 10>>),
+        &mut Option<ArrayVec<u8, 128>>,
+    ) -> Option<()>,
+>;
 
 pub struct HashDArrayAndDrop;
 
