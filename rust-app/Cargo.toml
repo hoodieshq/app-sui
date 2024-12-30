@@ -52,6 +52,9 @@ overflow-checks = false
 opt-level = 3
 overflow-checks = false
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("nanos", "flex", "stax"))'] }
+
 [package.metadata.ledger]
 name = "Sui"
 path = ["44'/784'"]
