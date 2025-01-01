@@ -38,7 +38,7 @@ dependencies = [
 [[package]]
 name = "alamgu-async-block"
 version = "0.1.2"
-source = "git+https://github.com/alamgu/alamgu-async-block#bd8c9abe1cd8f3a952e1b95b4adec4039874df10"
+source = "git+https://github.com/alamgu/alamgu-async-block#e3d6b773066dd6de1ddfe07924aeed0d0f5a6b0e"
 dependencies = [
  "arrayvec",
  "ledger-log",
@@ -85,7 +85,7 @@ dependencies = [
  "regex 1.10.3",
  "rustc-hash",
  "shlex",
- "syn 2.0.48",
+ "syn 2.0.58",
  "which",
 ]
 
@@ -321,6 +321,12 @@ dependencies = [
  "cfg-if",
  "crunchy",
 ]
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "home"
@@ -662,7 +668,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a41cf62165e97c7f814d2221421dbb9afcbcdb0a88068e5ea206e19951c2cbb5"
 dependencies = [
  "proc-macro2",
- "syn 2.0.48",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -809,6 +815,7 @@ version = "0.2.2"
 dependencies = [
  "alamgu-async-block",
  "arrayvec",
+ "hex",
  "include_gif",
  "ledger-crypto-helpers",
  "ledger-log",
@@ -835,9 +842,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.48"
+version = "2.0.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f3531638e407dfc0814761abb7c00a5b54992b849452a0646b7f65c9f770f3f"
+checksum = "44cfb93f38070beee36b3fef7d4f5a16f27751d94b187b666a5cc5e9b0d30687"
 dependencies = [
  "proc-macro2",
  "quote",

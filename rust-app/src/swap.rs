@@ -4,7 +4,6 @@ use core::str;
 
 use arrayvec::ArrayString;
 use get_params::CheckAddressParams;
-use get_params::CreateTxParams;
 use get_params::PrintableAmountParams;
 use ledger_crypto_helpers::{common::CryptographyError, eddsa::with_public_keys};
 use ledger_device_sdk::libcall::string::uint256_to_float;
@@ -38,7 +37,8 @@ fn unpack_path(buf: &[u8], out_path: &mut [u32]) -> Result<(), Error> {
     }
 
     for i in (0..buf.len()).step_by(BIP32_PATH_SEGMENT_LEN) {
-        let path_seg = u32::from_be_bytes([buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]);
+        // For some reason SUI coin app expects path in little endian byte order
+        let path_seg = u32::from_le_bytes([buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]);
 
         out_path[i / BIP32_PATH_SEGMENT_LEN] = path_seg;
     }
@@ -58,6 +58,7 @@ pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
         &mut dpath_buf,
     )?;
     let dpath = &dpath_buf[..dpath_len];
+    trace!("check_address: dpath: {:X?}", dpath);
 
     let ref_addr = address_to_str(&params.ref_address[..params.ref_address_len])?;
     trace!("check_address: ref: {}", ref_addr);
@@ -93,11 +94,4 @@ pub fn get_printable_amount(params: &mut PrintableAmountParams) -> Result<Custom
     trace!("get_printable_amount: {}", printable_amount.as_str());
 
     Ok(printable_amount)
-}
-
-pub fn sign_transaction(params: &mut CreateTxParams) -> Result<u8, Error> {
-    let dest_addr = address_to_str(&params.dest_address[..params.dest_address_len])?;
-    trace!("tr dest addr: {}", dest_addr);
-
-    todo!()
 }

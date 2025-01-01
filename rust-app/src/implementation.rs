@@ -1,4 +1,5 @@
 use crate::interface::*;
+use crate::main_nanos::RunModeInstance;
 use crate::settings::*;
 use crate::ui::*;
 use crate::utils::*;
@@ -701,5 +702,7 @@ pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
             reject::<()>(SyscallError::Unspecified as u16).await;
         }
     })
-    .await
+    .await;
+
+    RunModeInstance.get().set_signing_result(true);
 }

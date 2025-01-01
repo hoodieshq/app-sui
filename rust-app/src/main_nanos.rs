@@ -8,6 +8,7 @@ use crate::swap::get_params::my_get_check_address_params;
 use crate::swap::get_params::my_get_printable_amount_params;
 use crate::swap::get_params::my_sign_tx_params;
 use crate::swap::get_params::swap_return;
+use crate::swap::get_params::CreateTxParams;
 use crate::swap::get_params::SwapResult;
 
 use alamgu_async_block::*;
@@ -22,6 +23,91 @@ use ledger_prompts_ui::{handle_menu_button_event, show_menu};
 use core::cell::RefCell;
 use core::pin::Pin;
 use pin_cell::*;
+
+#[repr(u8)]
+pub enum RunMode {
+    App = 0x00,
+    LibSwapSign {
+        in_progress: bool,
+        is_success: bool,
+        tx_params: CreateTxParams,
+    },
+}
+
+impl RunMode {
+    pub fn is_swap_signing(&self) -> bool {
+        matches!(self, RunMode::LibSwapSign { .. })
+    }
+
+    pub fn start_swap_signing(&mut self, tx_params: CreateTxParams) {
+        debug_assert!(matches!(self, RunMode::App));
+
+        *self = RunMode::LibSwapSign {
+            in_progress: true,
+            is_success: false,
+            tx_params,
+        };
+    }
+
+    pub fn set_signing_result(&mut self, success: bool) {
+        let Self::LibSwapSign {
+            in_progress,
+            is_success,
+            ..
+        } = self
+        else {
+            // Don't care about signing result if we are in `App`` mode
+            return;
+        };
+
+        assert!(*in_progress, "Signing result set when not in progress");
+
+        *in_progress = false;
+        *is_success = success;
+    }
+
+    pub fn is_swap_signing_done(&self) -> bool {
+        matches!(
+            self,
+            RunMode::LibSwapSign {
+                in_progress: false,
+                ..
+            }
+        )
+    }
+
+    pub fn swap_sing_result(&self) -> (bool, *mut u8) {
+        let Self::LibSwapSign {
+            in_progress: false,
+            is_success,
+            tx_params,
+        } = self
+        else {
+            panic!("Not in signing mode or still in progress");
+        };
+
+        (*is_success, tx_params.exit_code_ptr)
+    }
+
+    pub fn tx_params(&self) -> &CreateTxParams {
+        let Self::LibSwapSign { tx_params, .. } = self else {
+            panic!("Not in signing mode");
+        };
+
+        tx_params
+    }
+}
+
+pub struct RunModeInstance;
+
+impl RunModeInstance {
+    pub fn get(&mut self) -> &mut RunMode {
+        static mut RUN_MODE: RunMode = RunMode::App;
+
+        // NOTE: returned lifetime is bound to self and not the 'static
+        unsafe { &mut RUN_MODE }
+    }
+}
 
 #[allow(dead_code)]
 pub fn app_main() {
@@ -65,14 +151,25 @@ pub fn app_main() {
 
     let menu = |states: core::cell::Ref<'_, Option<APDUsFuture>>,
                 idle: &IdleMenuWithSettings,
-                busy: &BusyMenu| match states.is_none() {
-        true => show_menu(idle),
-        _ => show_menu(busy),
+                busy: &BusyMenu| {
+        if RunModeInstance.get().is_swap_signing() {
+            return;
+        }
+
+        match states.is_none() {
+            true => show_menu(idle),
+            _ => show_menu(busy),
+        }
     };
 
     // Draw some 'welcome' screen
     menu(states.borrow(), &idle_menu, &busy_menu);
     loop {
+        if RunModeInstance.get().is_swap_signing_done() {
+            comm.borrow_mut().swap_reply_ok();
+            return;
+        }
+
         // Wait for either a specific button push to exit the app
         // or an APDU command
         let evt = comm.borrow_mut().next_event::<Ins>();
@@ -190,9 +287,13 @@ pub fn lib_main(arg0: u32) {
         LibCallCommand::SwapSignTransaction => {
             let mut params = my_sign_tx_params(arg0);
             trace!("{:X?}", params);
-            let res = swap::sign_transaction(&mut params).unwrap();
+            trace!("amount {}", params.amount);
 
-            swap_return(SwapResult::CreateTxResult(&mut params, res));
+            RunModeInstance.get().start_swap_signing(params);
+            app_main();
+            let (is_ok, _) = RunModeInstance.get().swap_sing_result();
+
+            swap_return(SwapResult::CreateTxResult(&mut params, is_ok as u8));
         }
     }
 }

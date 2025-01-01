@@ -1,3 +1,5 @@
+use core::{ffi::CStr, mem};
+
 #[cfg(any(target_os = "stax", target_os = "flex"))]
 use ledger_device_sdk::nbgl::NbglSpinner;
 use ledger_device_sdk::testing::debug_print;
@@ -6,11 +8,15 @@ use ledger_secure_sdk_sys::{
     libargs_s__bindgen_ty_1, libargs_t,
 };
 
+use crate::implementation::SuiAddressRaw;
+
+const ADDRESS_STR_LENGTH: usize = 66;
+
 #[derive(Debug)]
 pub struct CheckAddressParams {
     pub dpath: [u8; 64],
     pub dpath_len: usize,
-    pub ref_address: [u8; 128],
+    pub ref_address: [u8; ADDRESS_STR_LENGTH],
     pub ref_address_len: usize,
     pub result: *mut i32,
 }
@@ -20,7 +26,7 @@ impl Default for CheckAddressParams {
         CheckAddressParams {
             dpath: [0; 64],
             dpath_len: 0,
-            ref_address: [0; 128],
+            ref_address: [0; ADDRESS_STR_LENGTH],
             ref_address_len: 0,
             result: core::ptr::null_mut(),
         }
@@ -44,27 +50,19 @@ impl Default for PrintableAmountParams {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct CreateTxParams {
-    pub amount: [u8; 16],
-    pub amount_len: usize,
-    pub fee_amount: [u8; 16],
-    pub fee_amount_len: usize,
-    pub dest_address: [u8; 128],
-    pub dest_address_len: usize,
-    pub result: *mut u8,
+    pub amount: u64,
+    pub destination_address: SuiAddressRaw,
+    pub exit_code_ptr: *mut u8,
 }
 
 impl Default for CreateTxParams {
     fn default() -> Self {
         CreateTxParams {
-            amount: [0; 16],
-            amount_len: 0,
-            fee_amount: [0; 16],
-            fee_amount_len: 0,
-            dest_address: [0; 128],
-            dest_address_len: 0,
-            result: core::ptr::null_mut(),
+            amount: 0,
+            destination_address: SuiAddressRaw::default(),
+            exit_code_ptr: core::ptr::null_mut(),
         }
     }
 }
@@ -156,6 +154,19 @@ extern "C" {
     fn c_boot_std();
 }
 
+fn address_from_hex_cstr(c_str: *const i8) -> SuiAddressRaw {
+    let mut str = unsafe { CStr::from_ptr(c_str).to_str().expect("valid utf8") };
+
+    if str.starts_with("0x") {
+        str = &str[2..];
+    }
+
+    let mut address = SuiAddressRaw::default();
+    hex::decode_to_slice(str, &mut address).expect("valid hex");
+
+    address
+}
+
 pub fn my_sign_tx_params(arg0: u32) -> CreateTxParams {
     unsafe {
         debug_print("=> sign_tx_params\n");
@@ -176,28 +187,24 @@ pub fn my_sign_tx_params(arg0: u32) -> CreateTxParams {
         let mut create_tx_params: CreateTxParams = Default::default();
 
         debug_print("==> GET_AMOUNT\n");
-        create_tx_params.amount_len = params.amount_length as usize;
-        for i in 0..create_tx_params.amount_len {
-            create_tx_params.amount[16 - create_tx_params.amount_len + i] = *(params.amount.add(i));
+        let mut amount_buf = [0u8; 8];
+        let amount_len = params.amount_length as usize;
+        for i in 0..amount_len {
+            amount_buf[mem::size_of_val(&amount_buf) - amount_len + i] = *(params.amount.add(i));
         }
+        create_tx_params.amount = u64::from_be_bytes(amount_buf);
 
-        debug_print("==> GET_FEE\n");
-        create_tx_params.fee_amount_len = params.fee_amount_length as usize;
-        for i in 0..create_tx_params.fee_amount_len {
-            create_tx_params.fee_amount[16 - create_tx_params.fee_amount_len + i] =
-                *(params.fee_amount.add(i));
-        }
+        //debug_print("==> GET_FEE\n");
+        //create_tx_params.fee_amount_len = params.fee_amount_length as usize;
+        //for i in 0..create_tx_params.fee_amount_len {
+        //    create_tx_params.fee_amount[16 - create_tx_params.fee_amount_len + i] =
+        //        *(params.fee_amount.add(i));
+        //}
 
         debug_print("==> GET_DESTINATION_ADDRESS\n");
-        let mut dest_address_length = 0usize;
-        while *(params.destination_address.wrapping_add(dest_address_length)) != '\0' as i8 {
-            create_tx_params.dest_address[dest_address_length] =
-                *(params.destination_address.wrapping_add(dest_address_length)) as u8;
-            dest_address_length += 1;
-        }
-        create_tx_params.dest_address_len = dest_address_length;
+        create_tx_params.destination_address = address_from_hex_cstr(params.destination_address);
 
-        create_tx_params.result = &(*(libarg.__bindgen_anon_1.create_transaction
+        create_tx_params.exit_code_ptr = &(*(libarg.__bindgen_anon_1.create_transaction
             as *mut create_transaction_parameters_t))
             .result as *const u8 as *mut u8;
 
@@ -231,7 +238,7 @@ pub fn swap_return(res: SwapResult) {
                 *(p.amount_str.add(s.len())) = '\0' as i8;
             }
             SwapResult::CreateTxResult(&mut ref p, r) => {
-                *(p.result) = r;
+                *(p.exit_code_ptr) = r;
             }
         }
         ledger_secure_sdk_sys::os_lib_end();
