@@ -1,7 +1,6 @@
 #![no_std]
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
-#![feature(str_internals)]
 #![feature(type_alias_impl_trait)]
 #![feature(const_mut_refs)]
 // Add a hack to workaround ICE
