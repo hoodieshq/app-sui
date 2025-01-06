@@ -2,7 +2,6 @@
 #![allow(incomplete_features)]
 #![feature(stmt_expr_attributes)]
 #![feature(adt_const_params)]
-#![feature(str_internals)]
 #![feature(type_alias_impl_trait)]
 #![feature(const_mut_refs)]
 // Hack to fix build with nightly-2024-11-22
