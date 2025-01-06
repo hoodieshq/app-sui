@@ -76,6 +76,7 @@ pub type SHA3_256_HASH = Array<Byte, 33>;
 
 pub type SuiAddressRaw = [u8; SUI_ADDRESS_LENGTH];
 
+#[allow(dead_code)]
 pub struct SuiPubKeyAddress(ledger_device_sdk::ecc::ECPublicKey<65, 'E'>, SuiAddressRaw);
 
 use arrayvec::ArrayVec;
