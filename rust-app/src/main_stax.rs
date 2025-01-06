@@ -19,15 +19,25 @@ pub fn app_main() {
 
     let hostio_state: SingleThreaded<RefCell<HostIOState>> =
         SingleThreaded(RefCell::new(HostIOState::new(unsafe {
-            core::mem::transmute(&comm.0)
+            core::mem::transmute::<
+                &core::cell::RefCell<ledger_device_sdk::io::Comm>,
+                &core::cell::RefCell<ledger_device_sdk::io::Comm>,
+            >(&comm.0)
         })));
-    let hostio: SingleThreaded<HostIO> =
-        SingleThreaded(HostIO(unsafe { core::mem::transmute(&hostio_state.0) }));
+    let hostio: SingleThreaded<HostIO> = SingleThreaded(HostIO(unsafe {
+        core::mem::transmute::<
+            &core::cell::RefCell<alamgu_async_block::HostIOState>,
+            &core::cell::RefCell<alamgu_async_block::HostIOState>,
+        >(&hostio_state.0)
+    }));
     let states_backing: SingleThreaded<PinCell<Option<APDUsFuture>>> =
         SingleThreaded(PinCell::new(None));
     let states: SingleThreaded<Pin<&PinCell<Option<APDUsFuture>>>> =
         SingleThreaded(Pin::static_ref(unsafe {
-            core::mem::transmute(&states_backing.0)
+            core::mem::transmute::<
+                &pin_cell::PinCell<core::option::Option<APDUsFuture>>,
+                &pin_cell::PinCell<core::option::Option<APDUsFuture>>,
+            >(&states_backing.0)
         }));
 
     let mut settings = Settings;
@@ -57,8 +67,17 @@ pub fn app_main() {
     let do_refresh_val = true;
     let do_refresh = SingleThreaded(RefCell::new(do_refresh_val));
     let ui = UserInterface {
-        main_menu: unsafe { core::mem::transmute(&main_menu.0) },
-        do_refresh: unsafe { core::mem::transmute(&do_refresh.0) },
+        main_menu: unsafe {
+            core::mem::transmute::<
+                &core::cell::RefCell<ledger_device_sdk::nbgl::NbglHomeAndSettings>,
+                &core::cell::RefCell<ledger_device_sdk::nbgl::NbglHomeAndSettings>,
+            >(&main_menu.0)
+        },
+        do_refresh: unsafe {
+            core::mem::transmute::<&core::cell::RefCell<bool>, &core::cell::RefCell<bool>>(
+                &do_refresh.0,
+            )
+        },
     };
 
     let menu = |states: core::cell::Ref<'_, Option<APDUsFuture>>| {
