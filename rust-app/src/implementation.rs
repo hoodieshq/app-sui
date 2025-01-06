@@ -16,8 +16,7 @@ use ledger_parser_combinators::interp::*;
 use core::convert::TryFrom;
 use core::future::Future;
 
-pub type BipParserImplT =
-    impl AsyncParser<Bip32Key, ByteStream> + HasOutput<Bip32Key, Output = ArrayVec<u32, 10>>;
+pub type BipParserImplT = impl AsyncParser<Bip32Key, ByteStream, Output = ArrayVec<u32, 10>>;
 pub const BIP_PATH_PARSER: BipParserImplT = SubInterp(DefaultInterp);
 
 // Need a path of length 5, as make_bip32_path panics with smaller paths
@@ -546,8 +545,7 @@ impl<BS: Clone + Readable> AsyncParser<TransactionExpiration, BS> for DefaultInt
     }
 }
 
-const fn gas_data_parser<BS: Clone + Readable>(
-) -> impl AsyncParser<GasData, BS> + HasOutput<GasData, Output = u64> {
+const fn gas_data_parser<BS: Clone + Readable>() -> impl AsyncParser<GasData, BS, Output = u64> {
     Action(
         (
             SubInterp(object_ref_parser()),
@@ -566,13 +564,11 @@ const fn gas_data_parser<BS: Clone + Readable>(
     )
 }
 
-const fn object_ref_parser<BS: Readable>(
-) -> impl AsyncParser<ObjectRef, BS> + HasOutput<ObjectRef, Output = ()> {
+const fn object_ref_parser<BS: Readable>() -> impl AsyncParser<ObjectRef, BS, Output = ()> {
     Action((DefaultInterp, DefaultInterp, DefaultInterp), |_| Some(()))
 }
 
-const fn intent_parser<BS: Readable>(
-) -> impl AsyncParser<Intent, BS> + HasOutput<Intent, Output = ()> {
+const fn intent_parser<BS: Readable>() -> impl AsyncParser<Intent, BS, Output = ()> {
     Action((DefaultInterp, DefaultInterp, DefaultInterp), |_| {
         trace!("Intent Ok");
         Some(())
@@ -582,8 +578,7 @@ const fn intent_parser<BS: Readable>(
 type TransactionDataV1Output = (<TransactionKind as HasOutput<TransactionKind>>::Output, u64);
 
 const fn transaction_data_v1_parser<BS: Clone + Readable>(
-) -> impl AsyncParser<TransactionDataV1, BS>
-       + HasOutput<TransactionDataV1, Output = TransactionDataV1Output> {
+) -> impl AsyncParser<TransactionDataV1, BS, Output = TransactionDataV1Output> {
     Action(
         (
             TransactionKind,
@@ -626,8 +621,8 @@ impl<BS: Clone + Readable> AsyncParser<TransactionData, BS> for TransactionData 
     }
 }
 
-const fn tx_parser<BS: Clone + Readable>() -> impl AsyncParser<IntentMessage, BS>
-       + HasOutput<IntentMessage, Output = <TransactionData as HasOutput<TransactionData>>::Output>
+const fn tx_parser<BS: Clone + Readable>(
+) -> impl AsyncParser<IntentMessage, BS, Output = <TransactionData as HasOutput<TransactionData>>::Output>
 {
     Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
