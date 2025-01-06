@@ -1,9 +1,11 @@
 #![no_std]
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
-#![feature(str_internals)]
 #![feature(type_alias_impl_trait)]
 #![feature(const_mut_refs)]
+// Add a hack to workaround ICE
+#![feature(cfg_version)]
+#![cfg_attr(version("1.83"), feature(generic_const_exprs))]
 #![cfg_attr(all(target_family = "bolos", test), no_main)]
 #![cfg_attr(target_family = "bolos", feature(custom_test_frameworks))]
 #![reexport_test_harness_main = "test_main"]
