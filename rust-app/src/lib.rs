@@ -2,7 +2,7 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
 #![feature(type_alias_impl_trait)]
-#![feature(const_mut_refs)]
+#![cfg_attr(not(version("1.83")), feature(const_mut_refs))]
 // Add a hack to workaround ICE
 #![feature(cfg_version)]
 #![cfg_attr(version("1.83"), feature(generic_const_exprs))]
