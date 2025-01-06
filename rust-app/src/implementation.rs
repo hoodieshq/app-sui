@@ -76,7 +76,10 @@ impl HasOutput<CallArgSchema> for DefaultInterp {
 }
 
 impl<BS: Clone + Readable> AsyncParser<CallArgSchema, BS> for DefaultInterp {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
@@ -167,7 +170,10 @@ impl HasOutput<CommandSchema> for DefaultInterp {
 }
 
 impl<BS: Clone + Readable> AsyncParser<CommandSchema, BS> for DefaultInterp {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
@@ -227,7 +233,10 @@ impl HasOutput<ArgumentSchema> for DefaultInterp {
 }
 
 impl<BS: Clone + Readable> AsyncParser<ArgumentSchema, BS> for DefaultInterp {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
@@ -281,7 +290,10 @@ impl HasOutput<ProgrammableTransaction> for ProgrammableTransaction {
 }
 
 impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for ProgrammableTransaction {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let mut recipient_addr = None;
@@ -469,7 +481,10 @@ impl HasOutput<TransactionKind> for TransactionKind {
 }
 
 impl<BS: Clone + Readable> AsyncParser<TransactionKind, BS> for TransactionKind {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
@@ -502,7 +517,10 @@ impl HasOutput<TransactionExpiration> for DefaultInterp {
 }
 
 impl<BS: Clone + Readable> AsyncParser<TransactionExpiration, BS> for DefaultInterp {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
@@ -582,7 +600,10 @@ impl HasOutput<TransactionData> for TransactionData {
 }
 
 impl<BS: Clone + Readable> AsyncParser<TransactionData, BS> for TransactionData {
-    type State<'c> = impl Future<Output = Self::Output> + 'c where BS: 'c;
+    type State<'c>
+        = impl Future<Output = Self::Output> + 'c
+    where
+        BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
             let enum_variant =
