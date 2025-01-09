@@ -100,12 +100,20 @@ pub fn app_main() {
                 match poll_rv {
                     Ok(()) => {
                         trace!("APDU accepted; sending response");
-                        comm.borrow_mut().reply_ok();
+                        if RunMode.is_swap_signing() {
+                            comm.borrow_mut().swap_reply_ok();
+                        } else {
+                            comm.borrow_mut().reply_ok();
+                        }
                         trace!("Replied");
                     }
                     Err(sw) => {
                         PinMut::as_mut(&mut states.0.borrow_mut()).set(None);
-                        comm.borrow_mut().reply(sw);
+                        if RunMode.is_swap_signing() {
+                            comm.borrow_mut().swap_reply(sw);
+                        } else {
+                            comm.borrow_mut().reply(sw);
+                        }
                     }
                 };
                 // Reset BusyMenu if we are done handling APDU

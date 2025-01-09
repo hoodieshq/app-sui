@@ -12,14 +12,24 @@ use sui::main_stax::*;
 
 //ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
-pub fn custom_panic(info: &PanicInfo) -> ! {
+pub fn custom_panic(_info: &PanicInfo) -> ! {
     use ledger_device_sdk::io;
 
-    let mut comm = io::Comm::new();
-    comm.reply(io::StatusWords::Panic);
+    ledger_log::error!("Panic happened! {:#?}", _info);
 
-    ledger_log::error!("Panic happened! {:#?}", info);
-    ledger_secure_sdk_sys::exit_app(0);
+    let mut comm = io::Comm::new();
+
+    if RunMode.is_swap_signing() {
+        comm.swap_reply(io::StatusWords::Panic);
+        let (_, exit_code_ptr) = RunMode.swap_sing_result();
+        unsafe {
+            *exit_code_ptr = 0;
+            ledger_secure_sdk_sys::os_lib_end();
+        }
+    } else {
+        comm.reply(io::StatusWords::Panic);
+        ledger_secure_sdk_sys::exit_app(0);
+    }
 }
 
 ledger_device_sdk::set_panic!(custom_panic);
