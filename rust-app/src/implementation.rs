@@ -1,5 +1,5 @@
 use crate::interface::*;
-use crate::main_nanos::RunModeInstance;
+use crate::run_mode::RunMode;
 use crate::settings::*;
 use crate::ui::*;
 use crate::utils::*;
@@ -704,5 +704,5 @@ pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
     })
     .await;
 
-    RunModeInstance.get().set_signing_result(true);
+    RunMode.set_signing_result(true);
 }
