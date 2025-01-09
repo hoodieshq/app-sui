@@ -4,9 +4,9 @@ use crate::menu::*;
 use crate::settings::*;
 use crate::ui::UserInterface;
 use crate::swap;
-use crate::swap::get_params::my_get_check_address_params;
-use crate::swap::get_params::my_get_printable_amount_params;
-use crate::swap::get_params::my_sign_tx_params;
+use crate::swap::get_params::get_check_address_params;
+use crate::swap::get_params::get_printable_amount_params;
+use crate::swap::get_params::sign_tx_params;
 use crate::swap::get_params::swap_return;
 use crate::swap::get_params::CreateTxParams;
 use crate::swap::get_params::SwapResult;
@@ -265,7 +265,7 @@ pub fn lib_main(arg0: u32) {
 
     match cmd {
         LibCallCommand::SwapCheckAddress => {
-            let mut params = my_get_check_address_params(arg0);
+            let mut params = get_check_address_params(arg0).unwrap();
             trace!("{:X?}", params);
             let is_matched = swap::check_address(&mut params).unwrap();
 
@@ -275,7 +275,7 @@ pub fn lib_main(arg0: u32) {
             ));
         }
         LibCallCommand::SwapGetPrintableAmount => {
-            let mut params = my_get_printable_amount_params(arg0);
+            let mut params = get_printable_amount_params(arg0);
             trace!("{:X?}", params);
             let amount_str = swap::get_printable_amount(&mut params).unwrap();
 
@@ -285,7 +285,7 @@ pub fn lib_main(arg0: u32) {
             ));
         }
         LibCallCommand::SwapSignTransaction => {
-            let mut params = my_sign_tx_params(arg0);
+            let mut params = sign_tx_params(arg0);
             trace!("{:X?}", params);
             trace!("amount {}", params.amount);
 

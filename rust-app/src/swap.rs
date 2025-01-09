@@ -1,28 +1,27 @@
 use core::fmt::Write;
-use core::mem;
 use core::str;
 
 use arrayvec::ArrayString;
-use get_params::CheckAddressParams;
-use get_params::PrintableAmountParams;
 use ledger_crypto_helpers::{common::CryptographyError, eddsa::with_public_keys};
-use ledger_device_sdk::libcall::string::uint256_to_float;
-use ledger_device_sdk::libcall::string::CustomString;
-
 use ledger_log::trace;
 
+use crate::implementation::get_amount_in_decimals;
 use crate::implementation::SuiPubKeyAddress;
+
+use get_params::CheckAddressParams;
+use get_params::PrintableAmountParams;
 
 pub mod get_params;
 
-const MAX_BIP32_PATH_LENGTH: usize = 5;
-const BIP32_PATH_SEGMENT_LEN: usize = mem::size_of::<u32>();
+// Max SUI address length is 32*2 + 2 (prefix)
+const ADDRESS_STR_LENGTH: usize = 66;
 
 #[derive(Debug)]
 pub enum Error {
     DecodeDPathError(&'static str),
     CryptographyError(CryptographyError),
     BadAddressASCII,
+    BadAddressLength,
 }
 
 impl From<CryptographyError> for Error {
@@ -31,46 +30,18 @@ impl From<CryptographyError> for Error {
     }
 }
 
-fn unpack_path(buf: &[u8], out_path: &mut [u32]) -> Result<(), Error> {
-    if buf.len() % BIP32_PATH_SEGMENT_LEN != 0 {
-        return Err(Error::DecodeDPathError("Invalid path length"));
-    }
-
-    for i in (0..buf.len()).step_by(BIP32_PATH_SEGMENT_LEN) {
-        // For some reason SUI coin app expects path in little endian byte order
-        let path_seg = u32::from_le_bytes([buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]);
-
-        out_path[i / BIP32_PATH_SEGMENT_LEN] = path_seg;
-    }
-
-    Ok(())
-}
-
-fn address_to_str(address: &[u8]) -> Result<&str, Error> {
-    str::from_utf8(address).map_err(|_| Error::BadAddressASCII)
-}
-
 pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
-    let mut dpath_buf = [0u32; MAX_BIP32_PATH_LENGTH];
-    let dpath_len = params.dpath_len;
-    unpack_path(
-        &params.dpath[..dpath_len * BIP32_PATH_SEGMENT_LEN],
-        &mut dpath_buf,
-    )?;
-    let dpath = &dpath_buf[..dpath_len];
-    trace!("check_address: dpath: {:X?}", dpath);
-
-    let ref_addr = address_to_str(&params.ref_address[..params.ref_address_len])?;
+    let ref_addr = params.ref_address.as_str();
+    trace!("check_address: dpath: {:X?}", params.dpath);
     trace!("check_address: ref: {}", ref_addr);
-    // Max SUI address length is 32*2 + 2 (prefix)
-    let mut der_addr = ArrayString::<66>::default();
+
+    let mut der_addr = ArrayString::<ADDRESS_STR_LENGTH>::default();
 
     Ok(with_public_keys(
-        dpath,
+        &params.dpath,
         true,
         |_, address: &SuiPubKeyAddress| -> Result<_, CryptographyError> {
             write!(&mut der_addr, "{address}").expect("string always fits");
-
             trace!("check_address: der: {}", der_addr.as_str());
 
             Ok(ref_addr == der_addr.as_str())
@@ -78,20 +49,21 @@ pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
     )?)
 }
 
-fn trim_trailing_zeroes<const N: usize>(str: &mut CustomString<N>) {
-    while str.as_str().ends_with('0') {
-        str.len -= 1;
-    }
-}
+// Outputs a string with the amount in SUI.
+//
+// Max sui amount 10_000_000_000 SUI.
+// So max string length is 11 (quotient) + 1 (dot) + 12 (reminder) + 4 (text) = 28
+pub fn get_printable_amount(params: &mut PrintableAmountParams) -> Result<ArrayString<28>, Error> {
+    let (quotient, remainder_str) = get_amount_in_decimals(params.amount);
 
-pub fn get_printable_amount(params: &mut PrintableAmountParams) -> Result<CustomString<79>, Error> {
-    let mut amount_256 = [0u8; 32];
-    amount_256[params.amount.len()..].copy_from_slice(&params.amount);
+    let mut printable_amount = ArrayString::<28>::default();
+    write!(&mut printable_amount, "SUI {}.{}", quotient, remainder_str,)
+        .expect("string always fits");
 
-    let mut printable_amount = uint256_to_float(&amount_256, 9);
-    trim_trailing_zeroes(&mut printable_amount);
-
-    trace!("get_printable_amount: {}", printable_amount.as_str());
+    trace!(
+        "get_printable_amount: amount: {}",
+        printable_amount.as_str()
+    );
 
     Ok(printable_amount)
 }
