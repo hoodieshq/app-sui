@@ -13,7 +13,7 @@ use get_params::PrintableAmountParams;
 
 pub mod get_params;
 
-// Max SUI address length is 32*2 + 2 (prefix)
+// Max SUI address str length is 32*2 + 2 (prefix)
 const ADDRESS_STR_LENGTH: usize = 66;
 
 #[derive(Debug)]
