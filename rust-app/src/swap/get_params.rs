@@ -12,7 +12,7 @@ use ledger_secure_sdk_sys::{
 use crate::implementation::SuiAddressRaw;
 use crate::swap::Error;
 
-use super::ADDRESS_STR_LENGTH;
+use crate::swap::ADDRESS_STR_LENGTH;
 
 const MAX_BIP32_PATH_LENGTH: usize = 5;
 const BIP32_PATH_SEGMENT_LEN: usize = mem::size_of::<u32>();

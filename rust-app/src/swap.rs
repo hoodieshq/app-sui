@@ -5,12 +5,9 @@ use arrayvec::ArrayString;
 use ledger_crypto_helpers::{common::CryptographyError, eddsa::with_public_keys};
 use ledger_log::trace;
 
-use crate::implementation::get_amount_in_decimals;
-use crate::implementation::SuiPubKeyAddress;
+use crate::implementation::{get_amount_in_decimals, SuiPubKeyAddress};
 
-use get_params::CheckAddressParams;
-use get_params::PrintableAmountParams;
-
+use get_params::{CheckAddressParams, PrintableAmountParams};
 pub mod get_params;
 
 // Max SUI address str length is 32*2 + 2 (prefix)

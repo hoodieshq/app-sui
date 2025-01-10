@@ -5,11 +5,9 @@ use crate::run_mode::RunMode;
 use crate::settings::*;
 use crate::ui::UserInterface;
 use crate::swap;
-use crate::swap::get_params::get_check_address_params;
-use crate::swap::get_params::get_printable_amount_params;
-use crate::swap::get_params::sign_tx_params;
-use crate::swap::get_params::swap_return;
-use crate::swap::get_params::SwapResult;
+use crate::swap::get_params::{
+    get_check_address_params, get_printable_amount_params, sign_tx_params, swap_return, SwapResult,
+};
 
 use alamgu_async_block::*;
 
@@ -173,18 +171,6 @@ impl<T> core::ops::DerefMut for SingleThreaded<T> {
 
 pub fn lib_main(arg0: u32) {
     let cmd = libcall::get_command(arg0);
-
-    match &cmd {
-        LibCallCommand::SwapSignTransaction => {
-            trace!("lib_main: SwapSignTransaction");
-        }
-        LibCallCommand::SwapGetPrintableAmount => {
-            trace!("lib_main: SwapGetPrintableAmount");
-        }
-        LibCallCommand::SwapCheckAddress => {
-            trace!("lib_main: SwapCheckAddress");
-        }
-    }
 
     match cmd {
         LibCallCommand::SwapCheckAddress => {
