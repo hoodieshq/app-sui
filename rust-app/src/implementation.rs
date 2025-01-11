@@ -1,5 +1,5 @@
+use crate::ctx::RunModeCtx;
 use crate::interface::*;
-use crate::run_mode::RunMode;
 use crate::settings::*;
 use crate::ui::*;
 use crate::utils::*;
@@ -628,7 +628,14 @@ const fn tx_parser<BS: Clone + Readable>(
     Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
 
-pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
+pub async fn sign_apdu(io: HostIO, ctx: &RunModeCtx, settings: Settings, ui: UserInterface) {
+    let _on_failure = defer::defer(|| {
+        // In case of a swap, we need to communicate that signing failed
+        if CHECKS == ParseChecks::CheckSwapTx && !ctx.is_success() {
+            ctx.failure();
+        }
+    });
+
     let mut input = match io.get_params::<2>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -704,5 +711,5 @@ pub async fn sign_apdu(io: HostIO, settings: Settings, ui: UserInterface) {
     })
     .await;
 
-    RunMode.set_signing_result(true);
+    ctx.success();
 }

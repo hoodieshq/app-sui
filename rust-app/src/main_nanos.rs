@@ -1,7 +1,7 @@
 use crate::handle_apdu::*;
+use crate::ctx::RunModeCtx;
 use crate::interface::*;
 use crate::menu::*;
-use crate::run_mode::RunMode;
 use crate::settings::*;
 use crate::ui::UserInterface;
 use crate::swap;
@@ -12,8 +12,6 @@ use crate::swap::get_params::{
 use alamgu_async_block::*;
 
 use ledger_device_sdk::io;
-use ledger_device_sdk::libcall;
-use ledger_device_sdk::libcall::LibCallCommand;
 use ledger_device_sdk::uxapp::{UxEvent, BOLOS_UX_OK};
 use ledger_log::{info, trace};
 use ledger_prompts_ui::{handle_menu_button_event, show_menu};
@@ -23,7 +21,7 @@ use core::pin::Pin;
 use pin_cell::*;
 
 #[allow(dead_code)]
-pub fn app_main() {
+pub fn app_main(ctx: &RunModeCtx) {
     let comm: SingleThreaded<RefCell<io::Comm>> = SingleThreaded(RefCell::new(io::Comm::new()));
 
     let hostio_state: SingleThreaded<RefCell<HostIOState>> =
@@ -48,6 +46,10 @@ pub fn app_main() {
                 &pin_cell::PinCell<core::option::Option<APDUsFuture>>,
             >(&states_backing.0)
         }));
+    // SAFETY:
+    // Prolong the lifetime of `ctx``, because it should outlive the `APDUsFuture` future.
+    // It is safe because `ctx` comes from the caller and is guaranteed to outlive the future.
+    let ctx: &'static _ = unsafe { &*(ctx as *const RunModeCtx) };
 
     let mut idle_menu = IdleMenuWithSettings {
         idle_menu: IdleMenu::AppMain,
@@ -65,7 +67,7 @@ pub fn app_main() {
     let menu = |states: core::cell::Ref<'_, Option<APDUsFuture>>,
                 idle: &IdleMenuWithSettings,
                 busy: &BusyMenu| {
-        if RunMode.is_swap_signing() {
+        if ctx.is_swap_mode() {
             return;
         }
 
@@ -78,8 +80,7 @@ pub fn app_main() {
     // Draw some 'welcome' screen
     menu(states.borrow(), &idle_menu, &busy_menu);
     loop {
-        if RunMode.is_swap_signing_done() {
-            comm.borrow_mut().swap_reply_ok();
+        if ctx.is_finished() {
             return;
         }
 
@@ -93,12 +94,12 @@ pub fn app_main() {
                     PinMut::as_mut(&mut states.0.borrow_mut()),
                     ins,
                     *hostio,
-                    |io, ins| handle_apdu_async(io, ins, idle_menu.settings, UserInterface {}),
+                    |io, ins| handle_apdu_async(io, ins, idle_menu.settings, UserInterface {}, ctx),
                 );
                 match poll_rv {
                     Ok(()) => {
                         trace!("APDU accepted; sending response");
-                        if RunMode.is_swap_signing() {
+                        if ctx.is_swap_mode() {
                             comm.borrow_mut().swap_reply_ok();
                         } else {
                             comm.borrow_mut().reply_ok();
@@ -107,7 +108,7 @@ pub fn app_main() {
                     }
                     Err(sw) => {
                         PinMut::as_mut(&mut states.0.borrow_mut()).set(None);
-                        if RunMode.is_swap_signing() {
+                        if ctx.is_swap_mode() {
                             comm.borrow_mut().swap_reply(sw);
                         } else {
                             comm.borrow_mut().reply(sw);
@@ -166,43 +167,5 @@ impl<T> core::ops::Deref for SingleThreaded<T> {
 impl<T> core::ops::DerefMut for SingleThreaded<T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.0
-    }
-}
-
-pub fn lib_main(arg0: u32) {
-    let cmd = libcall::get_command(arg0);
-
-    match cmd {
-        LibCallCommand::SwapCheckAddress => {
-            let mut params = get_check_address_params(arg0).unwrap();
-            trace!("{:X?}", params);
-            let is_matched = swap::check_address(&mut params).unwrap();
-
-            swap_return(SwapResult::CheckAddressResult(
-                &mut params,
-                is_matched as i32,
-            ));
-        }
-        LibCallCommand::SwapGetPrintableAmount => {
-            let mut params = get_printable_amount_params(arg0);
-            trace!("{:X?}", params);
-            let amount_str = swap::get_printable_amount(&mut params).unwrap();
-
-            swap_return(SwapResult::PrintableAmountResult(
-                &mut params,
-                amount_str.as_str(),
-            ));
-        }
-        LibCallCommand::SwapSignTransaction => {
-            let mut params = sign_tx_params(arg0);
-            trace!("{:X?}", params);
-            trace!("amount {}", params.amount);
-
-            RunMode.start_swap_signing(params);
-            app_main();
-            let (is_ok, _) = RunMode.swap_sing_result();
-
-            swap_return(SwapResult::CreateTxResult(&mut params, is_ok as u8));
-        }
     }
 }

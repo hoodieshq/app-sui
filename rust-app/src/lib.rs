@@ -64,7 +64,7 @@ pub mod main_stax;
 pub mod swap;
 
 #[cfg(target_family = "bolos")]
-pub mod run_mode;
+pub mod ctx;
 
 #[cfg(all(target_family = "bolos", test))]
 use core::panic::PanicInfo;
