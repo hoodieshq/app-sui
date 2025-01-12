@@ -68,21 +68,6 @@ impl Default for CreateTxParams {
     }
 }
 
-fn unpack_path(buf: &[u8], out_path: &mut [u32]) -> Result<(), Error> {
-    if buf.len() % BIP32_PATH_SEGMENT_LEN != 0 {
-        return Err(Error::DecodeDPathError("Invalid path length"));
-    }
-
-    for i in (0..buf.len()).step_by(BIP32_PATH_SEGMENT_LEN) {
-        // For some reason SUI coin app expects path in little endian byte order
-        let path_seg = u32::from_le_bytes([buf[i + 0], buf[i + 1], buf[i + 2], buf[i + 3]]);
-
-        out_path[i / BIP32_PATH_SEGMENT_LEN] = path_seg;
-    }
-
-    Ok(())
-}
-
 pub fn get_check_address_params(arg0: u32) -> Result<CheckAddressParams, Error> {
     unsafe {
         trace!("=> get_check_address_params\n");
@@ -170,19 +155,6 @@ pub fn get_printable_amount_params(arg0: u32) -> PrintableAmountParams {
 extern "C" {
     fn c_reset_bss();
     fn c_boot_std();
-}
-
-fn address_from_hex_cstr(c_str: *const i8) -> SuiAddressRaw {
-    let mut str = unsafe { CStr::from_ptr(c_str).to_str().expect("valid utf8") };
-
-    if str.starts_with("0x") {
-        str = &str[2..];
-    }
-
-    let mut address = SuiAddressRaw::default();
-    hex::decode_to_slice(str, &mut address).expect("valid hex");
-
-    address
 }
 
 pub fn sign_tx_params(arg0: u32) -> CreateTxParams {

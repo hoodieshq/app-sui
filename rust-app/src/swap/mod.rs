@@ -1,10 +1,22 @@
-use core::{fmt::Write, str};
+use core::{convert::TryInto, fmt::Write};
 
 use arrayvec::ArrayString;
-use ledger_crypto_helpers::{common::CryptographyError, eddsa::with_public_keys};
-use ledger_device_sdk::libcall::{self, LibCallCommand};
+use ledger_crypto_helpers::common::HexSlice;
+use ledger_crypto_helpers::{
+    common::{Address, CryptographyError},
+    eddsa::with_public_keys,
+};
+use ledger_device_sdk::libcall::{
+    self,
+    swap::{
+        get_check_address_params, get_printable_amount_params, sign_tx_params, swap_return,
+        SwapResult,
+    },
+    LibCallCommand,
+};
 use ledger_log::trace;
 use panic_handler::{set_swap_panic_handler, swap_panic_handler, swap_panic_handler_comm};
+use params::{CheckAddressParams, CreateTxParams, PrintableAmountParams};
 
 use crate::{
     ctx::RunModeCtx,
@@ -12,24 +24,20 @@ use crate::{
     main_nanos::app_main,
 };
 
-use get_params::{
-    get_check_address_params, get_printable_amount_params, sign_tx_params, swap_return,
-    CheckAddressParams, CreateTxParams, PrintableAmountParams, SwapResult,
-};
-pub mod get_params;
 pub mod panic_handler;
-
-// Max SUI address str length is 32*2 + 2 (prefix)
-const ADDRESS_STR_LENGTH: usize = 66;
+pub mod params;
 
 pub const SWAP_BAD_VALID: u16 = 0x6e05;
 
 #[derive(Debug)]
 pub enum Error {
-    DecodeDPathError(&'static str),
+    DecodeDPathError,
     CryptographyError(CryptographyError),
+    WrongAmountLength,
+    WrongFeeLength,
     BadAddressASCII,
     BadAddressLength,
+    BadAddressHex,
 }
 
 impl From<CryptographyError> for Error {
@@ -39,20 +47,18 @@ impl From<CryptographyError> for Error {
 }
 
 pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
-    let ref_addr = params.ref_address.as_str();
+    let ref_addr = &params.ref_address;
     trace!("check_address: dpath: {:X?}", params.dpath);
-    trace!("check_address: ref: {}", ref_addr);
-
-    let mut der_addr = ArrayString::<ADDRESS_STR_LENGTH>::default();
+    trace!("check_address: ref: 0x{}", HexSlice(ref_addr));
 
     Ok(with_public_keys(
         &params.dpath,
         true,
         |_, address: &SuiPubKeyAddress| -> Result<_, CryptographyError> {
-            write!(&mut der_addr, "{address}").expect("string always fits");
-            trace!("check_address: der: {}", der_addr.as_str());
+            trace!("check_address: der: {}", address);
+            let der_addr = address.get_binary_address();
 
-            Ok(ref_addr == der_addr.as_str())
+            Ok(ref_addr == der_addr)
         },
     )?)
 }
@@ -61,7 +67,7 @@ pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
 //
 // Max sui amount 10_000_000_000 SUI.
 // So max string length is 11 (quotient) + 1 (dot) + 12 (reminder) + 4 (text) = 28
-pub fn get_printable_amount(params: &mut PrintableAmountParams) -> Result<ArrayString<28>, Error> {
+pub fn get_printable_amount(params: &PrintableAmountParams) -> Result<ArrayString<28>, Error> {
     let (quotient, remainder_str) = get_amount_in_decimals(params.amount);
 
     let mut printable_amount = ArrayString::<28>::default();
@@ -84,29 +90,35 @@ pub fn lib_main(arg0: u32) {
 
     match cmd {
         LibCallCommand::SwapCheckAddress => {
-            let mut params = get_check_address_params(arg0).unwrap();
+            let mut raw_params = get_check_address_params(arg0);
+            let params: CheckAddressParams = (&raw_params).try_into().unwrap();
+
             trace!("{:X?}", params);
-            let is_matched = check_address(&mut params).unwrap();
+            let is_matched = check_address(&params).unwrap();
 
             swap_return(SwapResult::CheckAddressResult(
-                &mut params,
+                &mut raw_params,
                 is_matched as i32,
             ));
         }
         LibCallCommand::SwapGetPrintableAmount => {
-            let mut params = get_printable_amount_params(arg0);
+            let mut raw_params = get_printable_amount_params(arg0);
+            let params: PrintableAmountParams = (&raw_params).try_into().unwrap();
+
             trace!("{:X?}", params);
-            let amount_str = get_printable_amount(&mut params).unwrap();
+            let amount_str = get_printable_amount(&params).unwrap();
 
             swap_return(SwapResult::PrintableAmountResult(
-                &mut params,
+                &mut raw_params,
                 amount_str.as_str(),
             ));
         }
         LibCallCommand::SwapSignTransaction => {
             set_swap_panic_handler(swap_panic_handler_comm);
 
-            let mut params = sign_tx_params(arg0);
+            let mut raw_params = sign_tx_params(arg0);
+            let params: CreateTxParams = (&raw_params).try_into().unwrap();
+
             trace!("{:X?}", params);
             trace!("amount {}", params.amount);
             unsafe {
@@ -117,7 +129,7 @@ pub fn lib_main(arg0: u32) {
             app_main(&ctx);
             let is_ok = ctx.is_success();
 
-            swap_return(SwapResult::CreateTxResult(&mut params, is_ok as u8));
+            swap_return(SwapResult::CreateTxResult(&mut raw_params, is_ok as u8));
         }
     }
 }

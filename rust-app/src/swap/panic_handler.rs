@@ -24,5 +24,6 @@ pub(crate) fn swap_panic_handler_comm(_info: &PanicInfo) -> ! {
 }
 
 pub(crate) fn swap_panic_handler(_info: &PanicInfo) -> ! {
+    ledger_log::error!("Swap panic happened! {:#?}", _info);
     unsafe { ledger_secure_sdk_sys::os_lib_end() }
 }
