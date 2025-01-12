@@ -19,7 +19,7 @@ use panic_handler::{set_swap_panic_handler, swap_panic_handler, swap_panic_handl
 use params::{CheckAddressParams, CreateTxParams, PrintableAmountParams, TxParamsAccessor};
 
 use crate::{
-    ctx::RunModeCtx,
+    ctx::RunCtx,
     implementation::{get_amount_in_decimals, SuiPubKeyAddress},
     main_nanos::app_main,
 };
@@ -118,9 +118,9 @@ pub fn lib_main(arg0: u32) {
             trace!("{:X?}", &params);
             TxParamsAccessor.set(params);
 
-            let ctx = RunModeCtx::lib_swap();
+            let ctx = RunCtx::lib_swap();
             app_main(&ctx);
-            let is_ok = ctx.is_success();
+            let is_ok = ctx.is_swap_succeeded();
 
             swap_return(SwapResult::CreateTxResult(&mut raw_params, is_ok as u8));
         }

@@ -9,43 +9,43 @@ pub enum State {
     LibSwapSignFailure,
 }
 
-pub struct RunModeCtx {
+pub struct RunCtx {
     state: Cell<State>,
 }
 
-impl RunModeCtx {
+impl RunCtx {
     pub fn app() -> Self {
-        RunModeCtx {
+        RunCtx {
             state: Cell::new(State::App),
         }
     }
 
     pub fn lib_swap() -> Self {
-        RunModeCtx {
+        RunCtx {
             state: Cell::new(State::LibSwapIdle),
         }
     }
 
-    pub fn is_swap_mode(&self) -> bool {
+    pub fn is_swap(&self) -> bool {
         !matches!(self.state.get(), State::App)
     }
 
-    pub fn is_finished(&self) -> bool {
+    pub fn is_swap_finished(&self) -> bool {
         matches!(
             self.state.get(),
             State::LibSwapSignSuccess | State::LibSwapSignFailure,
         )
     }
 
-    pub fn is_success(&self) -> bool {
+    pub fn is_swap_succeeded(&self) -> bool {
         matches!(self.state.get(), State::LibSwapSignSuccess)
     }
 
-    pub fn success(&self) {
+    pub fn set_success(&self) {
         self.state.set(State::LibSwapSignSuccess);
     }
 
-    pub fn failure(&self) {
+    pub fn set_failure(&self) {
         self.state.set(State::LibSwapSignFailure);
     }
 }

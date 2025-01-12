@@ -1,4 +1,4 @@
-use crate::ctx::RunModeCtx;
+use crate::ctx::RunCtx;
 use crate::interface::SW_SWAP_TX_PARAM;
 use crate::interface::*;
 use crate::settings::*;
@@ -783,15 +783,11 @@ const fn tx_parser<BS: Clone + Readable, const CHECKS: ParseChecks>(
     Action((intent_parser(), TransactionData::<CHECKS>), |_| Some(()))
 }
 
-pub async fn sign_apdu<const CHECKS: ParseChecks>(
-    io: HostIO,
-    settings: Settings,
-    ctx: &RunModeCtx,
-) {
+pub async fn sign_apdu<const CHECKS: ParseChecks>(io: HostIO, ctx: &RunCtx, settings: Settings) {
     let _on_failure = defer::defer(|| {
         // In case of a swap, we need to communicate that signing failed
-        if CHECKS == ParseChecks::CheckSwapTx && !ctx.is_success() {
-            ctx.failure();
+        if CHECKS == ParseChecks::CheckSwapTx && !ctx.is_swap_succeeded() {
+            ctx.set_failure();
         }
     });
 
@@ -908,7 +904,7 @@ pub async fn sign_apdu<const CHECKS: ParseChecks>(
     })
     .await;
 
-    ctx.success();
+    ctx.set_success();
 }
 
 pub type APDUsFuture<'ctx> = impl Future<Output = ()> + 'ctx;
@@ -917,8 +913,8 @@ pub type APDUsFuture<'ctx> = impl Future<Output = ()> + 'ctx;
 pub fn handle_apdu_async<'ctx>(
     io: HostIO,
     ins: Ins,
+    ctx: &'ctx RunCtx,
     settings: Settings,
-    ctx: &'ctx RunModeCtx,
 ) -> APDUsFuture<'ctx> {
     trace!("Constructing future");
     async move {
@@ -939,16 +935,16 @@ pub fn handle_apdu_async<'ctx>(
             Ins::GetPubkey => {
                 NoinlineFut(get_address_apdu(io, false)).await;
             }
-            Ins::Sign if ctx.is_swap_mode() => {
+            Ins::Sign if ctx.is_swap() => {
                 trace!("Handling swap sign");
-                NoinlineFut(sign_apdu::<{ ParseChecks::CheckSwapTx }>(io, settings, ctx)).await;
+                NoinlineFut(sign_apdu::<{ ParseChecks::CheckSwapTx }>(io, ctx, settings)).await;
             }
             Ins::Sign => {
                 trace!("Handling sign");
-                NoinlineFut(sign_apdu::<{ ParseChecks::PromptUser }>(io, settings, ctx)).await;
+                NoinlineFut(sign_apdu::<{ ParseChecks::PromptUser }>(io, ctx, settings)).await;
             }
             Ins::GetVersionStr => {}
-            Ins::Exit if ctx.is_swap_mode() => unsafe { ledger_secure_sdk_sys::os_lib_end() },
+            Ins::Exit if ctx.is_swap() => unsafe { ledger_secure_sdk_sys::os_lib_end() },
             Ins::Exit => ledger_device_sdk::exit_app(0),
         }
     }

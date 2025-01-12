@@ -1,4 +1,4 @@
-use crate::ctx::RunModeCtx;
+use crate::ctx::RunCtx;
 use crate::implementation::*;
 use crate::interface::*;
 use crate::settings::*;
@@ -16,9 +16,9 @@ pub type APDUsFuture = impl Future<Output = ()>;
 pub fn handle_apdu_async(
     io: HostIO,
     ins: Ins,
+    ctx: &RunCtx,
     settings: Settings,
     ui: UserInterface,
-    ctx: &RunModeCtx,
 ) -> APDUsFuture {
     trace!("Constructing future");
     async move {
@@ -41,7 +41,7 @@ pub fn handle_apdu_async(
             }
             Ins::Sign => {
                 trace!("Handling sign");
-                NoinlineFut(sign_apdu(io, settings, ctx, ui)).await;
+                NoinlineFut(sign_apdu(io, ctx, settings, ui)).await;
             }
             Ins::GetVersionStr => {}
             Ins::Exit => ledger_device_sdk::exit_app(0),

@@ -11,7 +11,7 @@ use sui::main_nanos::*;
 use sui::main_stax::*;
 
 use sui::{
-    ctx::RunModeCtx,
+    ctx::RunCtx,
     swap::{lib_main, panic_handler::get_swap_panic_handler},
 };
 
@@ -38,7 +38,7 @@ ledger_device_sdk::set_panic!(custom_panic);
 #[no_mangle]
 extern "C" fn sample_main(arg0: u32) {
     if arg0 == 0 {
-        app_main(&RunModeCtx::app());
+        app_main(&RunCtx::app());
     } else {
         lib_main(arg0);
     }
