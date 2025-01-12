@@ -95,64 +95,76 @@ pub fn lib_main(arg0: u32) {
         LibCallCommand::SwapCheckAddress => {
             let mut raw_params = get_check_address_params(arg0);
 
-            if let Err::<_, Error>(error) = try {
+            let result: Result<_, Error> = try {
                 let params: CheckAddressParams = (&raw_params).try_into()?;
                 trace!("{:X?}", &params);
 
-                let is_matched = check_address(&params)?;
+                check_address(&params)?
+            };
 
-                swap_return(SwapResult::CheckAddressResult(
-                    &mut raw_params,
-                    is_matched as i32,
-                ));
-            } {
-                error!("Error happened during CHECK_ADDRESS libcall:  {:?}", error);
-            }
+            let is_matched = result.unwrap_or_else(|_error| {
+                error!("Error happened during CHECK_ADDRESS libcall:  {:?}", _error);
+                false
+            });
+
+            swap_return(SwapResult::CheckAddressResult(
+                &mut raw_params,
+                is_matched as i32,
+            ));
         }
         LibCallCommand::SwapGetPrintableAmount => {
             let mut raw_params = get_printable_amount_params(arg0);
 
-            if let Err::<_, Error>(error) = try {
+            let result: Result<_, Error> = try {
                 let params: PrintableAmountParams = (&raw_params).try_into()?;
                 trace!("{:X?}", &params);
 
-                let amount_str = get_printable_amount(&params)?;
+                get_printable_amount(&params)?
+            };
 
-                swap_return(SwapResult::PrintableAmountResult(
-                    &mut raw_params,
-                    amount_str.as_str(),
-                ));
-            } {
-                error!(
-                    "Error happened during GET_PRINTABLE_AMOUNT libcall:  {:?}",
-                    error
-                );
-            }
+            let amount_str = result
+                .as_ref()
+                .map(|amount_str| amount_str.as_str())
+                .unwrap_or_else(|_error| {
+                    error!(
+                        "Error happened during GET_PRINTABLE_AMOUNT libcall:  {:?}",
+                        _error
+                    );
+                    // Return empty string in case of error
+                    ""
+                });
+
+            swap_return(SwapResult::PrintableAmountResult(
+                &mut raw_params,
+                amount_str,
+            ));
         }
         LibCallCommand::SwapSignTransaction => {
             let mut raw_params = sign_tx_params(arg0);
 
-            let params = match (&raw_params).try_into() {
-                Ok(params) => params,
-                Err(error) => {
-                    error!(
-                        "Error happened during SIGN_TRANSACTION libcall:  {:?}",
-                        error
-                    );
-                    unsafe { ledger_secure_sdk_sys::os_lib_end() }
+            let result: Result<_, Error> = try {
+                let params = (&raw_params).try_into()?;
+                trace!("{:X?}", &params);
+
+                // SAFETY: at this point, the app is initialized,
+                // so we can safely set the panic handler
+                unsafe {
+                    set_swap_panic_handler(swap_panic_handler);
                 }
+
+                let ctx = RunCtx::lib_swap(params);
+                app_main(&ctx);
+
+                ctx.is_swap_sign_succeeded()
             };
-            trace!("{:X?}", &params);
 
-            // SAFETY: at this point, the app is initialized,
-            // so we can safely set the panic handler
-            unsafe {
-                set_swap_panic_handler(swap_panic_handler);
-            }
-
-            let ctx = RunCtx::lib_swap(params);
-            app_main(&ctx);
-            let is_ok = ctx.is_swap_sign_succeeded();
+            let is_ok = result.unwrap_or_else(|_error| {
+                error!(
+                    "Error happened during SIGN_TRANSACTION libcall:  {:?}",
+                    _error
+                );
+                false
+            });
 
             swap_return(SwapResult::CreateTxResult(&mut raw_params, is_ok as u8));
         }
