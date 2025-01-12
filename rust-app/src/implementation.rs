@@ -630,7 +630,6 @@ const fn tx_parser<BS: Clone + Readable>(
     Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
 
-// Show prompts after all inputs have been parsed
 async fn prompt_tx_params(
     ui: &UserInterface,
     path: &[u32],
@@ -698,7 +697,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
 
         if ctx.is_swap() {
             let expected = ctx.get_swap_tx_params();
-            check_tx_params(&expected, &tx_params).await;
+            check_tx_params(expected, &tx_params).await;
         } else {
             // Show prompts after all inputs have been parsed
             prompt_tx_params(&ui, path.as_slice(), tx_params).await;

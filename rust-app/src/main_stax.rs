@@ -95,6 +95,10 @@ pub fn app_main(ctx: &RunCtx) {
     };
 
     loop {
+        if ctx.is_swap_finished() {
+            return;
+        }
+
         // This must be here, before handle_apdu
         // somehow doesn't work if its after handle_apdu
         menu(states.borrow());
