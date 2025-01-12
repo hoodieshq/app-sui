@@ -15,15 +15,15 @@ use sui::{
     swap::{lib_main, panic_handler::get_swap_panic_handler},
 };
 
-pub fn custom_panic(_info: &PanicInfo) -> ! {
+pub fn custom_panic(info: &PanicInfo) -> ! {
     use ledger_device_sdk::io;
 
     if let Some(swap_panic_handler) = get_swap_panic_handler() {
         // This handler is no-return
-        swap_panic_handler(_info);
+        swap_panic_handler(info);
     }
 
-    ledger_log::error!("Panic happened! {:#?}", _info);
+    ledger_log::error!("Panic happened! {:#?}", info);
 
     let mut comm = io::Comm::new();
     comm.reply(io::StatusWords::Panic);

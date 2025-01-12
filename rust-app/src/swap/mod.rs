@@ -15,8 +15,8 @@ use ledger_device_sdk::libcall::{
     },
     LibCallCommand,
 };
-use ledger_log::trace;
-use panic_handler::{set_swap_panic_handler, swap_panic_handler, swap_panic_handler_comm};
+use ledger_log::{error, trace};
+use panic_handler::{set_swap_panic_handler, swap_panic_handler};
 use params::{CheckAddressParams, PrintableAmountParams, TxParams};
 
 use crate::interface::SuiPubKeyAddress;
@@ -90,39 +90,65 @@ pub fn check_tx_params(expected: &TxParams, received: &TxParams) -> bool {
 
 pub fn lib_main(arg0: u32) {
     let cmd = libcall::get_command(arg0);
-    set_swap_panic_handler(swap_panic_handler);
 
     match cmd {
         LibCallCommand::SwapCheckAddress => {
             let mut raw_params = get_check_address_params(arg0);
-            let params: CheckAddressParams = (&raw_params).try_into().unwrap();
 
-            trace!("{:X?}", &params);
-            let is_matched = check_address(&params).unwrap();
+            if let Err::<_, Error>(error) = try {
+                let params: CheckAddressParams = (&raw_params).try_into()?;
+                trace!("{:X?}", &params);
 
-            swap_return(SwapResult::CheckAddressResult(
-                &mut raw_params,
-                is_matched as i32,
-            ));
+                let is_matched = check_address(&params)?;
+
+                swap_return(SwapResult::CheckAddressResult(
+                    &mut raw_params,
+                    is_matched as i32,
+                ));
+            } {
+                error!("Error happened during CHECK_ADDRESS libcall:  {:?}", error);
+            }
         }
         LibCallCommand::SwapGetPrintableAmount => {
             let mut raw_params = get_printable_amount_params(arg0);
-            let params: PrintableAmountParams = (&raw_params).try_into().unwrap();
 
-            trace!("{:X?}", &params);
-            let amount_str = get_printable_amount(&params).unwrap();
+            if let Err::<_, Error>(error) = try {
+                let params: PrintableAmountParams = (&raw_params).try_into()?;
+                trace!("{:X?}", &params);
 
-            swap_return(SwapResult::PrintableAmountResult(
-                &mut raw_params,
-                amount_str.as_str(),
-            ));
+                let amount_str = get_printable_amount(&params)?;
+
+                swap_return(SwapResult::PrintableAmountResult(
+                    &mut raw_params,
+                    amount_str.as_str(),
+                ));
+            } {
+                error!(
+                    "Error happened during GET_PRINTABLE_AMOUNT libcall:  {:?}",
+                    error
+                );
+            }
         }
         LibCallCommand::SwapSignTransaction => {
-            set_swap_panic_handler(swap_panic_handler_comm);
-
             let mut raw_params = sign_tx_params(arg0);
-            let params: TxParams = (&raw_params).try_into().unwrap();
+
+            let params = match (&raw_params).try_into() {
+                Ok(params) => params,
+                Err(error) => {
+                    error!(
+                        "Error happened during SIGN_TRANSACTION libcall:  {:?}",
+                        error
+                    );
+                    unsafe { ledger_secure_sdk_sys::os_lib_end() }
+                }
+            };
             trace!("{:X?}", &params);
+
+            // SAFETY: at this point, the app is initialized,
+            // so we can safely set the panic handler
+            unsafe {
+                set_swap_panic_handler(swap_panic_handler);
+            }
 
             let ctx = RunCtx::lib_swap(params);
             app_main(&ctx);
