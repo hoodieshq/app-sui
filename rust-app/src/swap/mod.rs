@@ -16,7 +16,7 @@ use ledger_device_sdk::libcall::{
 };
 use ledger_log::trace;
 use panic_handler::{set_swap_panic_handler, swap_panic_handler, swap_panic_handler_comm};
-use params::{CheckAddressParams, CreateTxParams, PrintableAmountParams};
+use params::{CheckAddressParams, CreateTxParams, PrintableAmountParams, TxParamsAccessor};
 
 use crate::{
     ctx::RunModeCtx,
@@ -26,8 +26,6 @@ use crate::{
 
 pub mod panic_handler;
 pub mod params;
-
-pub const SWAP_BAD_VALID: u16 = 0x6e05;
 
 #[derive(Debug)]
 pub enum Error {
@@ -82,8 +80,6 @@ pub fn get_printable_amount(params: &PrintableAmountParams) -> Result<ArrayStrin
     Ok(printable_amount)
 }
 
-pub static mut TX_PARAMS: Option<CreateTxParams> = None;
-
 pub fn lib_main(arg0: u32) {
     let cmd = libcall::get_command(arg0);
     set_swap_panic_handler(swap_panic_handler);
@@ -93,7 +89,7 @@ pub fn lib_main(arg0: u32) {
             let mut raw_params = get_check_address_params(arg0);
             let params: CheckAddressParams = (&raw_params).try_into().unwrap();
 
-            trace!("{:X?}", params);
+            trace!("{:X?}", &params);
             let is_matched = check_address(&params).unwrap();
 
             swap_return(SwapResult::CheckAddressResult(
@@ -105,7 +101,7 @@ pub fn lib_main(arg0: u32) {
             let mut raw_params = get_printable_amount_params(arg0);
             let params: PrintableAmountParams = (&raw_params).try_into().unwrap();
 
-            trace!("{:X?}", params);
+            trace!("{:X?}", &params);
             let amount_str = get_printable_amount(&params).unwrap();
 
             swap_return(SwapResult::PrintableAmountResult(
@@ -119,11 +115,8 @@ pub fn lib_main(arg0: u32) {
             let mut raw_params = sign_tx_params(arg0);
             let params: CreateTxParams = (&raw_params).try_into().unwrap();
 
-            trace!("{:X?}", params);
-            trace!("amount {}", params.amount);
-            unsafe {
-                TX_PARAMS = Some(params);
-            }
+            trace!("{:X?}", &params);
+            TxParamsAccessor.set(params);
 
             let ctx = RunModeCtx::lib_swap();
             app_main(&ctx);

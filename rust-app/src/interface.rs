@@ -143,3 +143,6 @@ impl TryFrom<ApduHeader> for Ins {
         }
     }
 }
+
+// Status word in used when swap transaction parameters check failed
+pub const SW_SWAP_TX_PARAM: u16 = 0x6e05;
