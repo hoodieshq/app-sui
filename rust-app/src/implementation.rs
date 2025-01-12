@@ -1,14 +1,13 @@
 use crate::ctx::RunCtx;
-use crate::interface::SW_SWAP_TX_PARAM;
 use crate::interface::*;
 use crate::settings::*;
-use crate::swap::params::TxParamsAccessor;
+use crate::swap;
+use crate::swap::params::TxParams;
+use crate::ui::*;
 use crate::utils::*;
 use alamgu_async_block::*;
-use arrayvec::ArrayString;
 use arrayvec::ArrayVec;
-use core::fmt::Write;
-use ledger_crypto_helpers::common::{try_option, Address, HexSlice};
+use ledger_crypto_helpers::common::{try_option, Address};
 use ledger_crypto_helpers::eddsa::{ed25519_public_key_bytes, eddsa_sign, with_public_keys};
 use ledger_crypto_helpers::hasher::{Blake2b, Hasher, HexHash};
 use ledger_device_sdk::io::{StatusWords, SyscallError};
@@ -16,48 +15,18 @@ use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::bcs::async_parser::*;
 use ledger_parser_combinators::interp::*;
-use ledger_prompts_ui::{final_accept_prompt, ScrollerError};
 
 use core::convert::TryFrom;
 use core::future::Future;
 
-pub type SuiAddressRaw = [u8; SUI_ADDRESS_LENGTH];
-
-pub struct SuiPubKeyAddress(ledger_device_sdk::ecc::ECPublicKey<65, 'E'>, SuiAddressRaw);
-
-impl Address<SuiPubKeyAddress, ledger_device_sdk::ecc::ECPublicKey<65, 'E'>> for SuiPubKeyAddress {
-    fn get_address(
-        key: &ledger_device_sdk::ecc::ECPublicKey<65, 'E'>,
-    ) -> Result<Self, SyscallError> {
-        let key_bytes = ed25519_public_key_bytes(key);
-        let mut tmp = ArrayVec::<u8, 33>::new();
-        let _ = tmp.try_push(0); // SIGNATURE_SCHEME_TO_FLAG['ED25519']
-        let _ = tmp.try_extend_from_slice(key_bytes);
-        let mut hasher: Blake2b = Hasher::new();
-        hasher.update(&tmp);
-        let hash: [u8; SUI_ADDRESS_LENGTH] = hasher.finalize();
-        Ok(SuiPubKeyAddress(key.clone(), hash))
-    }
-    fn get_binary_address(&self) -> &[u8] {
-        &self.1
-    }
-}
-
-impl core::fmt::Display for SuiPubKeyAddress {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "0x{}", HexSlice(&self.1))
-    }
-}
-
-pub type BipParserImplT =
-    impl AsyncParser<Bip32Key, ByteStream> + HasOutput<Bip32Key, Output = ArrayVec<u32, 10>>;
+pub type BipParserImplT = impl AsyncParser<Bip32Key, ByteStream, Output = ArrayVec<u32, 10>>;
 pub const BIP_PATH_PARSER: BipParserImplT = SubInterp(DefaultInterp);
 
 // Need a path of length 5, as make_bip32_path panics with smaller paths
 pub const BIP32_PREFIX: [u32; 5] =
     ledger_device_sdk::ecc::make_bip32_path(b"m/44'/784'/123'/0'/0'");
 
-pub async fn get_address_apdu(io: HostIO, prompt: bool) {
+pub async fn get_address_apdu(io: HostIO, ui: UserInterface, prompt: bool) {
     let input = match io.get_params::<1>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
@@ -74,9 +43,7 @@ pub async fn get_address_apdu(io: HostIO, prompt: bool) {
     if with_public_keys(&path, true, |key, address: &SuiPubKeyAddress| {
         try_option(|| -> Option<()> {
             if prompt {
-                scroller("Provide Public Key", |_w| Ok(()))?;
-                scroller_paginated("Address", |w| Ok(write!(w, "{address}")?))?;
-                final_accept_prompt(&[])?;
+                ui.confirm_address(address)?;
             }
 
             let key_bytes = ed25519_public_key_bytes(key);
@@ -317,22 +284,21 @@ impl<BS: Clone + Readable> AsyncParser<ArgumentSchema, BS> for DefaultInterp {
     }
 }
 
-impl<const CHECKS: ParseChecks> HasOutput<ProgrammableTransaction<CHECKS>>
-    for ProgrammableTransaction<CHECKS>
-{
-    type Output = ();
+impl HasOutput<ProgrammableTransaction> for ProgrammableTransaction {
+    type Output = (
+        <DefaultInterp as HasOutput<Recipient>>::Output,
+        <DefaultInterp as HasOutput<Amount>>::Output,
+    );
 }
 
-impl<BS: Clone + Readable, const CHECKS: ParseChecks>
-    AsyncParser<ProgrammableTransaction<CHECKS>, BS> for ProgrammableTransaction<CHECKS>
-{
+impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for ProgrammableTransaction {
     type State<'c>
         = impl Future<Output = Self::Output> + 'c
     where
         BS: 'c;
     fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
         async move {
-            let mut recipient = None;
+            let mut recipient_addr = None;
             let mut recipient_index = None;
             let mut amounts: ArrayVec<(u64, u32), SPLIT_COIN_ARRAY_LENGTH> = ArrayVec::new();
 
@@ -349,9 +315,9 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks>
                     )
                     .await;
                     match arg {
-                        CallArg::RecipientAddress(addr) => match recipient {
+                        CallArg::RecipientAddress(addr) => match recipient_addr {
                             None => {
-                                recipient = Some(addr);
+                                recipient_addr = Some(addr);
                                 recipient_index = Some(i);
                             }
                             // Reject on multiple RecipientAddress(s)
@@ -392,6 +358,18 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks>
                 )
                 .await;
             }
+
+            let recipient = match recipient_addr {
+                Some(addr) => addr,
+                _ => {
+                    reject_on(
+                        core::file!(),
+                        core::line!(),
+                        SyscallError::NotSupported as u16,
+                    )
+                    .await
+                }
+            };
 
             let mut verified_recipient = false;
             let mut total_amount: u64 = 0;
@@ -495,69 +473,16 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks>
                 .await;
             }
 
-            if CHECKS == ParseChecks::CheckSwapTx {
-                let is_check_failed = TxParamsAccessor.access(|params| {
-                    let mut is_check_failed = false;
-                    let expected_amount = params.amount;
-
-                    if expected_amount != total_amount {
-                        trace!(
-                            "Amount mismatch in swap signing, expected: {}, got: {}",
-                            expected_amount,
-                            total_amount
-                        );
-                        is_check_failed = true;
-                    }
-
-                    let recipient = recipient.as_ref().expect("recipient not set");
-                    if &params.destination_address != recipient {
-                        trace!(
-                            "Recipient mismatch in swap signing, expected: 0x{:X?}, got: 0x{:X?}",
-                            0,
-                            &recipient
-                        );
-                        is_check_failed = true;
-                    }
-
-                    is_check_failed
-                });
-
-                if is_check_failed {
-                    reject::<()>(SW_SWAP_TX_PARAM).await;
-                }
-            }
-
-            if CHECKS == ParseChecks::PromptUser
-                && Option::<()>::is_none(
-                    &try {
-                        scroller_paginated("To", |w| {
-                            Ok(write!(
-                                w,
-                                "0x{}",
-                                HexSlice(&recipient.ok_or(ScrollerError)?)
-                            )?)
-                        })?;
-
-                        let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
-                        scroller_paginated("Amount", |w| {
-                            Ok(write!(w, "SUI {quotient}.{}", remainder_str.as_str())?)
-                        })?;
-                    },
-                )
-            {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            }
+            (recipient, total_amount)
         }
     }
 }
 
-impl<const CHECKS: ParseChecks> HasOutput<TransactionKind<CHECKS>> for TransactionKind<CHECKS> {
-    type Output = ();
+impl HasOutput<TransactionKind> for TransactionKind {
+    type Output = <ProgrammableTransaction as HasOutput<ProgrammableTransaction>>::Output;
 }
 
-impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionKind<CHECKS>, BS>
-    for TransactionKind<CHECKS>
-{
+impl<BS: Clone + Readable> AsyncParser<TransactionKind, BS> for TransactionKind {
     type State<'c>
         = impl Future<Output = Self::Output> + 'c
     where
@@ -569,11 +494,11 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionKin
             match enum_variant {
                 0 => {
                     trace!("TransactionKind: ProgrammableTransaction");
-                    <ProgrammableTransaction<CHECKS> as AsyncParser<
-                        ProgrammableTransaction<CHECKS>,
-                        BS,
-                    >>::parse(&ProgrammableTransaction::<CHECKS>, input)
-                    .await;
+                    <ProgrammableTransaction as AsyncParser<ProgrammableTransaction, BS>>::parse(
+                        &ProgrammableTransaction,
+                        input,
+                    )
+                    .await
                 }
                 _ => {
                     trace!("TransactionKind: {}", enum_variant);
@@ -587,29 +512,6 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionKin
             }
         }
     }
-}
-
-pub fn get_amount_in_decimals(amount: u64) -> (u64, ArrayString<12>) {
-    let factor_pow = 9;
-    let factor = u64::pow(10, factor_pow);
-    let quotient = amount / factor;
-    let remainder = amount % factor;
-    let mut remainder_str: ArrayString<12> = ArrayString::new();
-    {
-        // Make a string for the remainder, containing at lease one zero
-        // So 1 SUI will be displayed as "1.0"
-        let mut rem = remainder;
-        for i in 0..factor_pow {
-            let f = u64::pow(10, factor_pow - i - 1);
-            let r = rem / f;
-            let _ = remainder_str.try_push(char::from(b'0' + r as u8));
-            rem %= f;
-            if rem == 0 {
-                break;
-            }
-        }
-    }
-    (quotient, remainder_str)
 }
 
 impl HasOutput<TransactionExpiration> for DefaultInterp {
@@ -646,112 +548,56 @@ impl<BS: Clone + Readable> AsyncParser<TransactionExpiration, BS> for DefaultInt
     }
 }
 
-const fn gas_data_parser<BS: Clone + Readable, const CHECKS: ParseChecks>(
-) -> impl AsyncParser<GasData<CHECKS>, BS> + HasOutput<GasData<CHECKS>, Output = ()> {
-    // Gas price is per gas amount. Gas budget is total, reflecting the amount of gas *
-    // gas price. We only care about the total, not the price or amount in isolation , so we
-    // just ignore that field.
-    //
-    // C.F. https://github.com/MystenLabs/sui/pull/8676
+const fn gas_data_parser<BS: Clone + Readable>() -> impl AsyncParser<GasData, BS, Output = u64> {
     Action(
         (
             SubInterp(object_ref_parser()),
             DefaultInterp,
             DefaultInterp,
-            GasBudget::<CHECKS>,
+            DefaultInterp,
         ),
-        |(_, _sender, _gas_price, _gas_budget): (_, _, u64, u64)| Some(()),
+        |(_, _sender, _gas_price, gas_budget): (_, _, u64, u64)| {
+            // Gas price is per gas amount. Gas budget is total, reflecting the amount of gas *
+            // gas price. We only care about the total, not the price or amount in isolation , so we
+            // just ignore that field.
+            //
+            // C.F. https://github.com/MystenLabs/sui/pull/8676
+            Some(gas_budget)
+        },
     )
 }
 
-impl<const CHECKS: ParseChecks> HasOutput<GasBudget<CHECKS>> for GasBudget<CHECKS> {
-    type Output = u64;
-}
-
-impl<const CHECKS: ParseChecks, BS: Clone + Readable> AsyncParser<GasBudget<CHECKS>, BS>
-    for GasBudget<CHECKS>
-{
-    type State<'c>
-        = impl Future<Output = Self::Output> + 'c
-    where
-        BS: 'c;
-    fn parse<'a: 'c, 'b: 'c, 'c>(&'b self, input: &'a mut BS) -> Self::State<'c> {
-        async move {
-            let gas_budget =
-                <DefaultInterp as AsyncParser<Amount, BS>>::parse(&DefaultInterp, input).await;
-
-            if CHECKS == ParseChecks::CheckSwapTx {
-                let is_check_failed = TxParamsAccessor.access(|params| {
-                    let expected_fee = params.fee;
-                    let is_check_failed = expected_fee != gas_budget;
-
-                    if is_check_failed {
-                        trace!(
-                            "Fee amount mismatch in swap signing, expected: {}, got: {}",
-                            expected_fee,
-                            gas_budget,
-                        );
-                    }
-
-                    is_check_failed
-                });
-
-                if is_check_failed {
-                    reject::<()>(SW_SWAP_TX_PARAM).await;
-                }
-            }
-
-            if CHECKS == ParseChecks::PromptUser {
-                let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
-                if scroller("Max Gas", |w| {
-                    Ok(write!(w, "SUI {}.{}", quotient, remainder_str.as_str())
-                        .expect("write failed"))
-                })
-                .is_none()
-                {
-                    reject::<()>(StatusWords::UserCancelled as u16).await;
-                }
-            }
-
-            gas_budget
-        }
-    }
-}
-
-const fn object_ref_parser<BS: Readable>(
-) -> impl AsyncParser<ObjectRef, BS> + HasOutput<ObjectRef, Output = ()> {
+const fn object_ref_parser<BS: Readable>() -> impl AsyncParser<ObjectRef, BS, Output = ()> {
     Action((DefaultInterp, DefaultInterp, DefaultInterp), |_| Some(()))
 }
 
-const fn intent_parser<BS: Readable>(
-) -> impl AsyncParser<Intent, BS> + HasOutput<Intent, Output = ()> {
+const fn intent_parser<BS: Readable>() -> impl AsyncParser<Intent, BS, Output = ()> {
     Action((DefaultInterp, DefaultInterp, DefaultInterp), |_| {
         trace!("Intent Ok");
         Some(())
     })
 }
 
-const fn transaction_data_v1_parser<BS: Clone + Readable, const CHECKS: ParseChecks>(
-) -> impl AsyncParser<TransactionDataV1<CHECKS>, BS> + HasOutput<TransactionDataV1<CHECKS>, Output = ()>
-{
+type TransactionDataV1Output = (<TransactionKind as HasOutput<TransactionKind>>::Output, u64);
+
+const fn transaction_data_v1_parser<BS: Clone + Readable>(
+) -> impl AsyncParser<TransactionDataV1, BS, Output = TransactionDataV1Output> {
     Action(
         (
-            TransactionKind::<CHECKS>,
+            TransactionKind,
             DefaultInterp,
-            gas_data_parser::<_, CHECKS>(),
+            gas_data_parser(),
             DefaultInterp,
         ),
-        |_| Some(()),
+        |(v, _, gas_budget, _)| Some((v, gas_budget)),
     )
 }
 
-impl<const CHECKS: ParseChecks> HasOutput<TransactionData<CHECKS>> for TransactionData<CHECKS> {
-    type Output = ();
+impl HasOutput<TransactionData> for TransactionData {
+    type Output = TransactionDataV1Output;
 }
 
-impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionData<CHECKS>, BS>
-    for TransactionData<CHECKS>
-{
+impl<BS: Clone + Readable> AsyncParser<TransactionData, BS> for TransactionData {
     type State<'c>
         = impl Future<Output = Self::Output> + 'c
     where
@@ -763,7 +609,7 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionDat
             match enum_variant {
                 0 => {
                     trace!("TransactionData: V1");
-                    transaction_data_v1_parser::<_, CHECKS>().parse(input).await;
+                    transaction_data_v1_parser().parse(input).await
                 }
                 _ => {
                     reject_on(
@@ -778,16 +624,42 @@ impl<BS: Clone + Readable, const CHECKS: ParseChecks> AsyncParser<TransactionDat
     }
 }
 
-const fn tx_parser<BS: Clone + Readable, const CHECKS: ParseChecks>(
-) -> impl AsyncParser<IntentMessage<CHECKS>, BS> + HasOutput<IntentMessage<CHECKS>, Output = ()> {
-    Action((intent_parser(), TransactionData::<CHECKS>), |_| Some(()))
+const fn tx_parser<BS: Clone + Readable>(
+) -> impl AsyncParser<IntentMessage, BS, Output = <TransactionData as HasOutput<TransactionData>>::Output>
+{
+    Action((intent_parser(), TransactionData), |(_, d)| Some(d))
 }
 
-pub async fn sign_apdu<const CHECKS: ParseChecks>(io: HostIO, ctx: &RunCtx, settings: Settings) {
+// Show prompts after all inputs have been parsed
+async fn prompt_tx_params(
+    ui: &UserInterface,
+    path: &[u32],
+    TxParams {
+        amount,
+        fee,
+        destination_address,
+    }: TxParams,
+) {
+    if with_public_keys(path, true, |_, address: &SuiPubKeyAddress| {
+        try_option(ui.confirm_sign_tx(address, destination_address, amount, fee))
+    })
+    .ok()
+    .is_none()
+    {
+        reject::<()>(StatusWords::UserCancelled as u16).await;
+    };
+}
+async fn check_tx_params(expected: &TxParams, received: &TxParams) {
+    if !swap::check_tx_params(expected, received) {
+        reject::<()>(SW_SWAP_TX_PARAM_MISMATCH).await;
+    }
+}
+
+pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInterface) {
     let _on_failure = defer::defer(|| {
         // In case of a swap, we need to communicate that signing failed
-        if CHECKS == ParseChecks::CheckSwapTx && !ctx.is_swap_succeeded() {
-            ctx.set_failure();
+        if ctx.is_swap() && !ctx.is_swap_sign_succeeded() {
+            ctx.set_swap_sign_failure();
         }
     });
 
@@ -803,75 +675,43 @@ pub async fn sign_apdu<const CHECKS: ParseChecks>(io: HostIO, ctx: &RunCtx, sett
         let mut txn = input[0].clone();
         NoinlineFut(async move {
             trace!("Beginning check parse");
-            TryFuture(tx_parser::<_, { ParseChecks::None }>().parse(&mut txn))
-                .await
-                .is_some()
+            TryFuture(tx_parser().parse(&mut txn)).await.is_some()
         })
         .await
     };
 
     if known_txn {
-        if CHECKS == ParseChecks::PromptUser {
-            if scroller("Transfer", |w| Ok(write!(w, "SUI")?)).is_none() {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            };
+        let mut txn = input[0].clone();
+        let ((recipient, total_amount), gas_budget) = tx_parser().parse(&mut txn).await;
+
+        let mut bs = input[1].clone();
+        let path = BIP_PATH_PARSER.parse(&mut bs).await;
+        if !path.starts_with(&BIP32_PREFIX[0..2]) {
+            reject::<()>(SyscallError::InvalidParameter as u16).await;
         }
 
-        {
-            let mut bs = input[1].clone();
-            NoinlineFut(async move {
-                let path = BIP_PATH_PARSER.parse(&mut bs).await;
-                if !path.starts_with(&BIP32_PREFIX[0..2]) {
-                    reject::<()>(SyscallError::InvalidParameter as u16).await;
-                }
-                if with_public_keys(&path, true, |_, address: &SuiPubKeyAddress| {
-                    try_option(|| -> Option<()> {
-                        if CHECKS == ParseChecks::PromptUser {
-                            scroller_paginated("From", |w| Ok(write!(w, "{address}")?))?;
-                        }
-                        Some(())
-                    }())
-                })
-                .ok()
-                .is_none()
-                {
-                    reject::<()>(StatusWords::UserCancelled as u16).await;
-                }
-            })
-            .await
+        let tx_params = TxParams {
+            amount: total_amount,
+            fee: gas_budget,
+            destination_address: recipient,
         };
 
-        {
-            let mut txn = input[0].clone();
-            NoinlineFut(async move {
-                trace!("Beginning parse");
-                tx_parser::<_, CHECKS>().parse(&mut txn).await;
-            })
-            .await
-        };
-
-        if CHECKS == ParseChecks::PromptUser {
-            if final_accept_prompt(&["Sign Transaction?"]).is_none() {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            };
+        if ctx.is_swap() {
+            let expected = ctx.get_swap_tx_params();
+            check_tx_params(&expected, &tx_params).await;
+        } else {
+            // Show prompts after all inputs have been parsed
+            prompt_tx_params(&ui, path.as_slice(), tx_params).await;
         }
-    } else if settings.get() == 0 {
-        scroller("WARNING", |w| {
-            Ok(write!(
-                w,
-                "Transaction not recognized, enable blind signing to sign unknown transactions"
-            )?)
-        });
+    } else if !settings.get_blind_sign() || ctx.is_swap() {
+        ui.warn_tx_not_recognized();
         reject::<()>(SyscallError::NotSupported as u16).await;
-    } else if scroller("WARNING", |w| Ok(write!(w, "Transaction not recognized")?)).is_none() {
-        reject::<()>(StatusWords::UserCancelled as u16).await;
     }
 
-    // By the time we get here, we've approved and just need to do the signature.
     NoinlineFut(async move {
         let mut hasher: Blake2b = Hasher::new();
         {
-            let mut txn: ByteStream = input[0].clone();
+            let mut txn = input[0].clone();
             const CHUNK_SIZE: usize = 128;
             let (chunks, rem) = (length / CHUNK_SIZE, length % CHUNK_SIZE);
             for _ in 0..chunks {
@@ -885,10 +725,8 @@ pub async fn sign_apdu<const CHECKS: ParseChecks>(io: HostIO, ctx: &RunCtx, sett
         }
         let hash: HexHash<32> = hasher.finalize();
         if !known_txn {
-            if scroller("Transaction Hash", |w| Ok(write!(w, "0x{hash}")?)).is_none() {
-                reject::<()>(StatusWords::UserCancelled as u16).await;
-            };
-            if final_accept_prompt(&["Blind Sign Transaction?"]).is_none() {
+            // Show prompts after all inputs have been parsed
+            if ui.confirm_blind_sign_tx(&hash).is_none() {
                 reject::<()>(StatusWords::UserCancelled as u16).await;
             };
         }
@@ -904,48 +742,6 @@ pub async fn sign_apdu<const CHECKS: ParseChecks>(io: HostIO, ctx: &RunCtx, sett
     })
     .await;
 
-    ctx.set_success();
-}
-
-pub type APDUsFuture<'ctx> = impl Future<Output = ()> + 'ctx;
-
-#[inline(never)]
-pub fn handle_apdu_async<'ctx>(
-    io: HostIO,
-    ins: Ins,
-    ctx: &'ctx RunCtx,
-    settings: Settings,
-) -> APDUsFuture<'ctx> {
-    trace!("Constructing future");
-    async move {
-        trace!("Dispatching");
-        match ins {
-            Ins::GetVersion => {
-                const APP_NAME: &str = "sui";
-                let mut rv = ArrayVec::<u8, 220>::new();
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_MINOR").parse().unwrap());
-                let _ = rv.try_push(env!("CARGO_PKG_VERSION_PATCH").parse().unwrap());
-                let _ = rv.try_extend_from_slice(APP_NAME.as_bytes());
-                io.result_final(&rv).await;
-            }
-            Ins::VerifyAddress => {
-                NoinlineFut(get_address_apdu(io, true)).await;
-            }
-            Ins::GetPubkey => {
-                NoinlineFut(get_address_apdu(io, false)).await;
-            }
-            Ins::Sign if ctx.is_swap() => {
-                trace!("Handling swap sign");
-                NoinlineFut(sign_apdu::<{ ParseChecks::CheckSwapTx }>(io, ctx, settings)).await;
-            }
-            Ins::Sign => {
-                trace!("Handling sign");
-                NoinlineFut(sign_apdu::<{ ParseChecks::PromptUser }>(io, ctx, settings)).await;
-            }
-            Ins::GetVersionStr => {}
-            Ins::Exit if ctx.is_swap() => unsafe { ledger_secure_sdk_sys::os_lib_end() },
-            Ins::Exit => ledger_device_sdk::exit_app(0),
-        }
-    }
+    // Does nothing if not a swap mode
+    ctx.set_swap_sign_success();
 }

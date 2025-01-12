@@ -15,8 +15,6 @@ use sui::{
     swap::{lib_main, panic_handler::get_swap_panic_handler},
 };
 
-//ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
-
 pub fn custom_panic(_info: &PanicInfo) -> ! {
     use ledger_device_sdk::io;
 

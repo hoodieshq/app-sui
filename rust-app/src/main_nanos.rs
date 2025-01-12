@@ -1,13 +1,9 @@
-use crate::handle_apdu::*;
 use crate::ctx::RunCtx;
+use crate::handle_apdu::*;
 use crate::interface::*;
 use crate::menu::*;
 use crate::settings::*;
 use crate::ui::UserInterface;
-use crate::swap;
-use crate::swap::get_params::{
-    get_check_address_params, get_printable_amount_params, sign_tx_params, swap_return, SwapResult,
-};
 
 use alamgu_async_block::*;
 
@@ -150,22 +146,5 @@ pub fn app_main(ctx: &RunCtx) {
                 //trace!("Ignoring ticker event");
             }
         }
-    }
-}
-
-// We are single-threaded in fact, albeit with nontrivial code flow. We don't need to worry about
-// full atomicity of the below globals.
-struct SingleThreaded<T>(T);
-unsafe impl<T> Send for SingleThreaded<T> {}
-unsafe impl<T> Sync for SingleThreaded<T> {}
-impl<T> core::ops::Deref for SingleThreaded<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
-impl<T> core::ops::DerefMut for SingleThreaded<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
     }
 }

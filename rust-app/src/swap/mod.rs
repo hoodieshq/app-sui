@@ -1,6 +1,7 @@
 use core::{convert::TryInto, fmt::Write};
 
 use arrayvec::ArrayString;
+#[allow(unused_imports)]
 use ledger_crypto_helpers::common::HexSlice;
 use ledger_crypto_helpers::{
     common::{Address, CryptographyError},
@@ -16,13 +17,14 @@ use ledger_device_sdk::libcall::{
 };
 use ledger_log::trace;
 use panic_handler::{set_swap_panic_handler, swap_panic_handler, swap_panic_handler_comm};
-use params::{CheckAddressParams, CreateTxParams, PrintableAmountParams, TxParamsAccessor};
+use params::{CheckAddressParams, PrintableAmountParams, TxParams};
 
-use crate::{
-    ctx::RunCtx,
-    implementation::{get_amount_in_decimals, SuiPubKeyAddress},
-    main_nanos::app_main,
-};
+use crate::interface::SuiPubKeyAddress;
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use crate::main_nanos::app_main;
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+use crate::main_stax::app_main;
+use crate::{ctx::RunCtx, utils::get_amount_in_decimals};
 
 pub mod panic_handler;
 pub mod params;
@@ -80,6 +82,12 @@ pub fn get_printable_amount(params: &PrintableAmountParams) -> Result<ArrayStrin
     Ok(printable_amount)
 }
 
+pub fn check_tx_params(expected: &TxParams, received: &TxParams) -> bool {
+    expected.amount == received.amount
+        && expected.fee == received.fee
+        && expected.destination_address == received.destination_address
+}
+
 pub fn lib_main(arg0: u32) {
     let cmd = libcall::get_command(arg0);
     set_swap_panic_handler(swap_panic_handler);
@@ -113,14 +121,12 @@ pub fn lib_main(arg0: u32) {
             set_swap_panic_handler(swap_panic_handler_comm);
 
             let mut raw_params = sign_tx_params(arg0);
-            let params: CreateTxParams = (&raw_params).try_into().unwrap();
-
+            let params: TxParams = (&raw_params).try_into().unwrap();
             trace!("{:X?}", &params);
-            TxParamsAccessor.set(params);
 
-            let ctx = RunCtx::lib_swap();
+            let ctx = RunCtx::lib_swap(params);
             app_main(&ctx);
-            let is_ok = ctx.is_swap_succeeded();
+            let is_ok = ctx.is_swap_sign_succeeded();
 
             swap_return(SwapResult::CreateTxResult(&mut raw_params, is_ok as u8));
         }

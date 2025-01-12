@@ -1,11 +1,10 @@
 use arrayvec::ArrayVec;
-use core::cell::RefCell;
 use core::convert::{TryFrom, TryInto};
 use core::ffi::CStr;
 use core::mem;
 use ledger_device_sdk::libcall;
 
-use crate::implementation::SuiAddressRaw;
+use crate::interface::SuiAddressRaw;
 use crate::swap::Error;
 
 // Max SUI address str length is 32*2
@@ -56,13 +55,13 @@ impl TryFrom<&libcall::swap::PrintableAmountParams> for PrintableAmountParams {
 }
 
 #[derive(Debug, Default)]
-pub struct CreateTxParams {
+pub struct TxParams {
     pub amount: u64,
     pub fee: u64,
     pub destination_address: SuiAddressRaw,
 }
 
-impl TryFrom<&libcall::swap::CreateTxParams> for CreateTxParams {
+impl TryFrom<&libcall::swap::CreateTxParams> for TxParams {
     type Error = Error;
 
     fn try_from(params: &libcall::swap::CreateTxParams) -> Result<Self, Self::Error> {
@@ -80,7 +79,7 @@ impl TryFrom<&libcall::swap::CreateTxParams> for CreateTxParams {
 
         let destination_address = address_from_hex_cstr(params.dest_address.as_ptr())?;
 
-        Ok(CreateTxParams {
+        Ok(TxParams {
             amount,
             fee,
             destination_address,
@@ -121,22 +120,4 @@ fn address_from_hex_cstr(c_str: *const u8) -> Result<SuiAddressRaw, Error> {
     hex::decode_to_slice(str, &mut address).map_err(|_| Error::BadAddressHex)?;
 
     Ok(address)
-}
-
-static mut TX_PARAMS: RefCell<Option<CreateTxParams>> = RefCell::new(None);
-
-pub struct TxParamsAccessor;
-
-impl TxParamsAccessor {
-    pub fn set(&self, params: CreateTxParams) {
-        // SAFETY: app environment is inherently single-threaded
-        unsafe {
-            *TX_PARAMS.borrow_mut() = Some(params);
-        }
-    }
-
-    pub fn access<R>(&self, f: impl FnOnce(&CreateTxParams) -> R) -> R {
-        // SAFETY: app environment is inherently single-threaded
-        f(unsafe { &TX_PARAMS.borrow().as_ref().expect("TX_PARAMS not set") })
-    }
 }
