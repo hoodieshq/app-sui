@@ -3,6 +3,8 @@ use crate::utils::*;
 
 extern crate alloc;
 use alloc::format;
+use arrayvec::ArrayString;
+use core::fmt::Write;
 
 use core::cell::RefCell;
 use include_gif::include_gif;
@@ -48,6 +50,8 @@ impl UserInterface {
         recipient: [u8; 32],
         total_amount: u64,
         gas_budget: u64,
+        ticker: &str,
+        decimals: u8,
     ) -> Option<()> {
         self.do_refresh.replace(true);
         let tx_fields = [
@@ -62,26 +66,28 @@ impl UserInterface {
             Field {
                 name: "Amount",
                 value: {
-                    let (quotient, remainder_str) = get_amount_in_decimals(total_amount);
-                    &format!("SUI {}.{}", quotient, remainder_str.as_str())
+                    let (quotient, remainder_str) = get_amount_in_decimals(total_amount, decimals);
+                    &format!("{ticker} {}.{}", quotient, remainder_str.as_str())
                 },
             },
             Field {
                 name: "Max Gas",
                 value: {
-                    let (quotient, remainder_str) = get_amount_in_decimals(gas_budget);
+                    let (quotient, remainder_str) =
+                        get_amount_in_decimals(gas_budget, SUI_DECIMALS);
                     &format!("SUI {}.{}", quotient, remainder_str.as_str())
                 },
             },
         ];
 
+        let mut title = ArrayString::<40>::new();
+        let _ = write!(&mut title, "Review transaction to transfer {ticker}");
+        let mut finish_title = ArrayString::<40>::new();
+        let _ = write!(&mut finish_title, "Sign transaction to transfer {ticker}");
+
         let success = NbglReview::new()
             .glyph(&APP_ICON)
-            .titles(
-                "Review transaction to transfer SUI",
-                "",
-                "Sign transaction to transfer SUI",
-            )
+            .titles(title.as_str(), "", finish_title.as_str())
             .show(&tx_fields);
         NbglReviewStatus::new()
             .status_type(StatusType::Transaction)

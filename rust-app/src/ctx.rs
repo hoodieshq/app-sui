@@ -70,7 +70,7 @@ impl RunCtx {
     }
 }
 
-// Coin object configuration methods
+// Coin info methods
 impl RunCtx {
     pub fn set_coin_info(&self, config: CoinInfo) {
         self.coin_obj_config.borrow_mut().replace(config);

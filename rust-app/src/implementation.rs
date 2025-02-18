@@ -598,7 +598,12 @@ const fn object_ref_parser_with_output<BS: Readable>(
     Action(
         (DefaultInterp, DefaultInterp, DefaultInterp),
         |(address, version, (_sz, digest))| {
-            trace!("ObjectRef{{ \naddr: {:X?}, \nversion: {} \ndigest {:X?} }}", &address, version, &digest);
+            trace!(
+                "ObjectRef{{ \naddr: {:X?}, \nversion: {} \ndigest {:X?} }}",
+                &address,
+                version,
+                &digest
+            );
             Some(ObjectRefOutput {
                 address,
                 version,
@@ -699,8 +704,7 @@ async fn match_coin_object(ctx: &RunCtx, coin_object: ObjectRefOutput) -> (Array
             return Err(SW_TX_COIN_INFO_NOT_SET);
         };
 
-        if stored_coin_info.coin_object != coin_object 
-        {
+        if stored_coin_info.coin_object != coin_object {
             return Err(SW_TX_COIN_INFO_MISMATCH);
         }
 
@@ -709,9 +713,7 @@ async fn match_coin_object(ctx: &RunCtx, coin_object: ObjectRefOutput) -> (Array
 
     match res {
         Ok(v) => v,
-        Err(sw) => {
-            reject(sw).await
-        }
+        Err(sw) => reject(sw).await,
     }
 }
 
@@ -725,9 +727,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
 
     let mut input = match io.get_params::<2>() {
         Some(v) => v,
-        None => {
-            reject(SyscallError::InvalidParameter as u16).await
-        }
+        None => reject(SyscallError::InvalidParameter as u16).await,
     };
 
     // Read length, and move input[0] by one byte
@@ -746,7 +746,6 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
         let mut txn = input[0].clone();
         let ((recipient, total_amount, maybe_coin_obj), gas_budget) =
             tx_parser().parse(&mut txn).await;
-
 
         let mut bs = input[1].clone();
         let path = BIP_PATH_PARSER.parse(&mut bs).await;
