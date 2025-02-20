@@ -738,9 +738,16 @@ async fn match_coin_objects(
             return Err(SW_TX_COIN_INFO_NOT_SET);
         };
 
-        //if stored_coin_info.coin_object != coin_object {
-        //    return Err(SW_TX_COIN_INFO_MISMATCH);
-        //}
+        for coin_object in coin_object_list.iter() {
+            if stored_coin_info
+                .coin_objects
+                .iter()
+                .find(|&x| x == coin_object)
+                .is_none()
+            {
+                return Err(SW_TX_COIN_INFO_MISMATCH);
+            }
+        }
 
         Ok((stored_coin_info.ticker.clone(), stored_coin_info.decimals))
     });
@@ -814,7 +821,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
     NoinlineFut(async move {
         let mut hasher: Blake2b = Hasher::new();
         {
-            let mut txn = input[0].clone();
+            let mut txn: ByteStream = input[0].clone();
             const CHUNK_SIZE: usize = 128;
             let (chunks, rem) = (length / CHUNK_SIZE, length % CHUNK_SIZE);
             for _ in 0..chunks {
@@ -850,33 +857,63 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
 }
 
 const TICKER_MAX_SIZE: usize = 8;
-const DER_SIGNATURE_SIZE: usize = 73;
 
 #[cfg_attr(feature = "speculos", derive(Debug))]
 pub struct CoinInfo {
-    pub coin_object: ObjectRefOutput,
     pub ticker: ArrayString<TICKER_MAX_SIZE>,
     pub decimals: u8,
+    pub coin_objects: ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH>,
 }
 
 pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
-    let mut input = match io.get_params::<1>() {
+    const MAX_CONFIG_SIZE: usize = 96;
+    const MAX_DER_SIGNATURE_SIZE: usize = 73;
+
+    let input = match io.get_params::<1>() {
         Some(v) => v,
         None => reject(SyscallError::InvalidParameter as u16).await,
     };
 
-    let coin_object = ObjectRefOutput {
-        address: input[0].read().await,
-        version: u64::from_le_bytes(input[0].read().await),
-        digest: input[0].read().await,
-    };
+    // Check coin config signature
+    {
+        let mut stream = input[0].clone();
 
+        let config_size = u8::from_le_bytes(stream.read().await);
+        let mut config_buf = ArrayVec::<u8, MAX_CONFIG_SIZE>::new();
+        for _ in 0..config_size {
+            let b = u8::from_le_bytes(stream.read().await);
+            if let Err(_) = config_buf.try_push(b) {
+                reject::<()>(SyscallError::InvalidParameter as u16).await;
+            }
+        }
+
+        let der_sig_size = u8::from_le_bytes(stream.read().await);
+        let mut der_signature_buf = ArrayVec::<u8, MAX_DER_SIGNATURE_SIZE>::new();
+        for _ in 0..der_sig_size {
+            let b = u8::from_le_bytes(stream.read().await);
+            if let Err(_) = der_signature_buf.try_push(b) {
+                reject::<()>(SyscallError::InvalidParameter as u16).await;
+            }
+        }
+
+        if !check_coin_configuration_signature(&config_buf, &der_signature_buf) {
+            reject::<()>(SW_SET_COIN_INFO_BAD_SIGN).await;
+        }
+    }
+
+    let mut stream = input[0].clone();
+    let _config_size = u8::from_le_bytes(stream.read().await);
+
+    // Parse coin info
     let coin_info = CoinInfo {
-        coin_object,
         ticker: {
             let res: Option<_> = try {
-                let ticker_len = u8::from_le_bytes(input[0].read().await) as usize;
-                let ticker_bytes: [u8; 8] = input[0].read().await;
+                let ticker_len = u8::from_le_bytes(stream.read().await) as usize;
+                let mut ticker_bytes = [0u8; TICKER_MAX_SIZE];
+                for i in 0..ticker_len {
+                    ticker_bytes[i] = u8::from_le_bytes(stream.read().await);
+                }
+
                 let ticker_str = str::from_utf8(&ticker_bytes[..ticker_len]).ok()?;
                 ArrayString::from(ticker_str).ok()?
             };
@@ -886,39 +923,20 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
             };
             ticker
         },
-        decimals: u8::from_le_bytes(input[0].read().await),
+        decimals: u8::from_le_bytes(stream.read().await),
+        coin_objects: {
+            let cnt = u8::from_le_bytes(stream.read().await) as usize;
+            let mut coin_objects: ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH> = ArrayVec::new();
+            for _ in 0..cnt {
+                if let Err(_) = coin_objects.try_push(stream.read().await) {
+                    reject::<()>(SyscallError::InvalidParameter as u16).await;
+                }
+            }
+            coin_objects
+        },
     };
 
-    let der_signature_size = u8::from_le_bytes(input[0].read().await);
-    let der_signature: [u8; DER_SIGNATURE_SIZE] = input[0].read().await;
-    let der_signature = &der_signature[..der_signature_size as usize];
-
-    trace!("CoinInfo: {:X?}", coin_info);
-    trace!("Signature: {:X?}", der_signature);
-
-    let mut config_buf = [0u8; 96];
-    let mut pos = 0;
-
-    config_buf[..coin_info.coin_object.address.len()]
-        .copy_from_slice(&coin_info.coin_object.address);
-    pos += coin_info.coin_object.address.len();
-    config_buf[pos..pos + size_of::<u64>()]
-        .copy_from_slice(&coin_info.coin_object.version.to_le_bytes());
-    pos += size_of::<u64>();
-    config_buf[pos..pos + coin_info.coin_object.digest.len()]
-        .copy_from_slice(&coin_info.coin_object.digest);
-    pos += coin_info.coin_object.digest.len();
-
-    config_buf[pos..pos + coin_info.ticker.len()].copy_from_slice(coin_info.ticker.as_bytes());
-    pos += coin_info.ticker.len();
-    config_buf[pos] = coin_info.decimals;
-    pos += 1;
-
-    if check_coin_configuration_signature(&config_buf[..pos], &der_signature) {
-        ctx.set_coin_info(coin_info);
-    } else {
-        reject::<()>(SW_SET_COIN_INFO_BAD_SIGN).await;
-    }
+    ctx.set_coin_info(coin_info);
 
     io.result_final(&[]).await;
 }
