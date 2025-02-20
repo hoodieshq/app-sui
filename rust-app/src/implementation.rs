@@ -174,10 +174,12 @@ impl<BS: Clone + Readable> AsyncParser<CallArgSchema, BS> for DefaultInterp {
 
 pub const TRANSFER_OBJECT_ARRAY_LENGTH: usize = 1;
 pub const SPLIT_COIN_ARRAY_LENGTH: usize = 8;
+pub const OBJECT_ARRAY_LENGTH: usize = 4;
 
 pub enum Command {
     TransferObject(ArrayVec<Argument, TRANSFER_OBJECT_ARRAY_LENGTH>, Argument),
     SplitCoins(Argument, ArrayVec<Argument, SPLIT_COIN_ARRAY_LENGTH>),
+    MergeCoins,
 }
 
 impl HasOutput<CommandSchema> for DefaultInterp {
@@ -222,6 +224,21 @@ impl<BS: Clone + Readable> AsyncParser<CommandSchema, BS> for DefaultInterp {
                     .await;
                     Command::SplitCoins(v1, v2)
                 }
+                3 => {
+                    trace!("CommandSchema: MergeCoins");
+                    // Don't care about the arguments, just consuming input
+                    let _v1 = <DefaultInterp as AsyncParser<ArgumentSchema, BS>>::parse(
+                        &DefaultInterp,
+                        input,
+                    )
+                    .await;
+                    let _v2 = <SubInterp<DefaultInterp> as AsyncParser<
+                        Vec<ArgumentSchema, SPLIT_COIN_ARRAY_LENGTH>,
+                        BS,
+                    >>::parse(&SubInterp(DefaultInterp), input)
+                    .await;
+                    Command::MergeCoins
+                }
                 _ => {
                     trace!("CommandSchema: Unknown enum: {}", enum_variant);
                     reject_on(
@@ -236,6 +253,7 @@ impl<BS: Clone + Readable> AsyncParser<CommandSchema, BS> for DefaultInterp {
     }
 }
 
+#[cfg_attr(feature = "speculos", derive(Debug))]
 pub enum Argument {
     GasCoin,
     Input(u16),
@@ -301,7 +319,7 @@ impl HasOutput<ProgrammableTransaction> for ProgrammableTransaction {
     type Output = (
         <DefaultInterp as HasOutput<Recipient>>::Output,
         <DefaultInterp as HasOutput<Amount>>::Output,
-        Option<ObjectRefOutput>,
+        ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH>,
     );
 }
 
@@ -314,9 +332,8 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
         async move {
             let mut recipient_addr = None;
             let mut recipient_index = None;
-            let mut amounts: ArrayVec<(u64, u32), SPLIT_COIN_ARRAY_LENGTH> = ArrayVec::new();
-            let mut out_obj = None;
-            let mut obj_index = 0u16;
+            let mut amounts: ArrayVec<(u64, u16), SPLIT_COIN_ARRAY_LENGTH> = ArrayVec::new();
+            let mut objects = ArrayVec::<(SuiAddressRaw, u16), OBJECT_ARRAY_LENGTH>::new();
 
             // Handle inputs
             {
@@ -324,7 +341,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                     <DefaultInterp as AsyncParser<ULEB128, BS>>::parse(&DefaultInterp, input).await;
 
                 trace!("ProgrammableTransaction: Inputs: {}", length);
-                for i in 0..length {
+                for i in 0..length as u16 {
                     let arg = <DefaultInterp as AsyncParser<CallArgSchema, BS>>::parse(
                         &DefaultInterp,
                         input,
@@ -332,8 +349,15 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                     .await;
                     match arg {
                         CallArg::ImmOrOwnedObject(obj) => {
-                            out_obj = Some(obj);
-                            obj_index = i as u16;
+                            if let Err(_) = objects.try_push((obj.address, i)) {
+                                // Reject on MAX coin objects
+                                reject_on(
+                                    core::file!(),
+                                    core::line!(),
+                                    SyscallError::NotSupported as u16,
+                                )
+                                .await
+                            }
                         }
                         CallArg::RecipientAddress(addr) => match recipient_addr {
                             None => {
@@ -417,7 +441,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                             }
                             match recipient_input {
                                 Argument::Input(inp_index) => {
-                                    if Some(inp_index as u32) != recipient_index {
+                                    if Some(inp_index) != recipient_index {
                                         trace!("TransferObject recipient mismatch");
                                         reject_on::<()>(
                                             core::file!(),
@@ -441,7 +465,9 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                         Command::SplitCoins(coin, input_indices) => {
                             match coin {
                                 Argument::GasCoin => {}
-                                Argument::Input(input) if input == obj_index => {
+                                Argument::Input(input)
+                                    if objects.iter().find(|(_, idx)| *idx == input).is_some() =>
+                                {
                                     trace!("SplitCoins: Object");
                                 }
                                 _ => {
@@ -457,7 +483,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                                 match arg {
                                     Argument::Input(inp_index) => {
                                         for (amt, ix) in &amounts {
-                                            if *ix == (*inp_index as u32) {
+                                            if *ix == (*inp_index) {
                                                 match total_amount.checked_add(*amt) {
                                                     Some(t) => total_amount = t,
                                                     None => {
@@ -483,6 +509,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                                 }
                             }
                         }
+                        Command::MergeCoins => (),
                     }
                 }
             }
@@ -496,7 +523,10 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                 .await;
             }
 
-            (recipient, total_amount, out_obj)
+            let objects: ArrayVec<_, OBJECT_ARRAY_LENGTH> =
+                objects.into_iter().map(|(addr, _)| addr).collect();
+
+            (recipient, total_amount, objects)
         }
     }
 }
@@ -699,15 +729,18 @@ async fn check_tx_params(expected: &TxParams, received: &TxParams) {
     }
 }
 
-async fn match_coin_object(ctx: &RunCtx, coin_object: ObjectRefOutput) -> (ArrayString<8>, u8) {
+async fn match_coin_objects(
+    ctx: &RunCtx,
+    coin_object_list: ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH>,
+) -> (ArrayString<8>, u8) {
     let res = ctx.access_coin_info(|stored_coin_info| -> Result<_, u16> {
         let Some(stored_coin_info) = stored_coin_info else {
             return Err(SW_TX_COIN_INFO_NOT_SET);
         };
 
-        if stored_coin_info.coin_object != coin_object {
-            return Err(SW_TX_COIN_INFO_MISMATCH);
-        }
+        //if stored_coin_info.coin_object != coin_object {
+        //    return Err(SW_TX_COIN_INFO_MISMATCH);
+        //}
 
         Ok((stored_coin_info.ticker.clone(), stored_coin_info.decimals))
     });
@@ -745,7 +778,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
 
     if known_txn {
         let mut txn = input[0].clone();
-        let ((recipient, total_amount, maybe_coin_obj), gas_budget) =
+        let ((recipient, total_amount, coin_objects), gas_budget) =
             tx_parser().parse(&mut txn).await;
 
         let mut bs = input[1].clone();
@@ -764,10 +797,11 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
             let expected = ctx.get_swap_tx_params();
             check_tx_params(expected, &tx_params).await;
         } else {
-            let (ticker, decimals) = if let Some(coin_object) = maybe_coin_obj {
-                match_coin_object(ctx, coin_object).await
-            } else {
+            // No coin objects means it's a native SUI transaction
+            let (ticker, decimals) = if coin_objects.is_empty() {
                 (ArrayString::from("SUI").unwrap(), SUI_DECIMALS)
+            } else {
+                match_coin_objects(ctx, coin_objects).await
             };
             // Show prompts after all inputs have been parsed
             prompt_tx_params(&ui, path.as_slice(), tx_params, ticker.as_str(), decimals).await;
