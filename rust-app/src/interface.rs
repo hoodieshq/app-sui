@@ -144,7 +144,9 @@ impl TryFrom<ApduHeader> for Ins {
     }
 }
 
+// TODO: verify status word is not used
 // Status word used when swap transaction parameters check failed
 pub const SW_SWAP_TX_PARAM_MISMATCH: u16 = 0x6e05;
 pub const SW_TX_COIN_INFO_NOT_SET: u16 = 0x6e06;
 pub const SW_TX_COIN_INFO_MISMATCH: u16 = 0x6e07;
+pub const SW_SET_COIN_INFO_BAD_SIGN: u16 = 0x6e09;

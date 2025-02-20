@@ -1,3 +1,4 @@
+use crate::coin_config::check_coin_configuration_signature;
 use crate::ctx::RunCtx;
 use crate::interface::*;
 use crate::settings::*;
@@ -814,12 +815,14 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
     ctx.set_swap_sign_success();
 }
 
+const TICKER_MAX_SIZE: usize = 8;
+const DER_SIGNATURE_SIZE: usize = 73;
+
 #[cfg_attr(feature = "speculos", derive(Debug))]
 pub struct CoinInfo {
     pub coin_object: ObjectRefOutput,
-    pub ticker: ArrayString<8>,
+    pub ticker: ArrayString<TICKER_MAX_SIZE>,
     pub decimals: u8,
-    pub der_signature: ArrayVec<u8, 73>,
 }
 
 pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
@@ -850,14 +853,38 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
             ticker
         },
         decimals: u8::from_le_bytes(input[0].read().await),
-        der_signature: input[0].read().await.into(),
     };
 
-    io.result_final(&[]).await;
+    let der_signature_size = u8::from_le_bytes(input[0].read().await);
+    let der_signature: [u8; DER_SIGNATURE_SIZE] = input[0].read().await;
+    let der_signature = &der_signature[..der_signature_size as usize];
 
     trace!("CoinInfo: {:X?}", coin_info);
+    trace!("Signature: {:X?}", der_signature);
 
-    //TODO: Check signature
+    let mut config_buf = [0u8; 96];
+    let mut pos = 0;
 
-    ctx.set_coin_info(coin_info);
+    config_buf[..coin_info.coin_object.address.len()]
+        .copy_from_slice(&coin_info.coin_object.address);
+    pos += coin_info.coin_object.address.len();
+    config_buf[pos..pos + size_of::<u64>()]
+        .copy_from_slice(&coin_info.coin_object.version.to_le_bytes());
+    pos += size_of::<u64>();
+    config_buf[pos..pos + coin_info.coin_object.digest.len()]
+        .copy_from_slice(&coin_info.coin_object.digest);
+    pos += coin_info.coin_object.digest.len();
+
+    config_buf[pos..pos + coin_info.ticker.len()].copy_from_slice(coin_info.ticker.as_bytes());
+    pos += coin_info.ticker.len();
+    config_buf[pos] = coin_info.decimals;
+    pos += 1;
+
+    if check_coin_configuration_signature(&config_buf[..pos], &der_signature) {
+        ctx.set_coin_info(coin_info);
+    } else {
+        reject::<()>(SW_SET_COIN_INFO_BAD_SIGN).await;
+    }
+
+    io.result_final(&[]).await;
 }

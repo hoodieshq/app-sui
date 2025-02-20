@@ -16,6 +16,8 @@ use ledger_log::{info, trace};
 
 #[allow(dead_code)]
 pub fn app_main(ctx: &RunCtx) {
+    init_coin_config_pubkey();
+
     let comm: SingleThreaded<RefCell<io::Comm>> = SingleThreaded(RefCell::new(io::Comm::new()));
 
     let hostio_state: SingleThreaded<RefCell<HostIOState>> =

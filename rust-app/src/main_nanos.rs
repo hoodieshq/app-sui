@@ -1,3 +1,4 @@
+use crate::coin_config::init_coin_config_pubkey;
 use crate::ctx::RunCtx;
 use crate::handle_apdu::*;
 use crate::interface::*;
@@ -18,6 +19,8 @@ use pin_cell::*;
 
 #[allow(dead_code)]
 pub fn app_main(ctx: &RunCtx) {
+    init_coin_config_pubkey();
+
     let comm: SingleThreaded<RefCell<io::Comm>> = SingleThreaded(RefCell::new(io::Comm::new()));
 
     let hostio_state: SingleThreaded<RefCell<HostIOState>> =
