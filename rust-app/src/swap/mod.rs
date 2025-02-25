@@ -23,7 +23,7 @@ use params::{CheckAddressParams, PrintableAmountParams, TxParams};
 use crate::main_nanos::app_main;
 #[cfg(any(target_os = "stax", target_os = "flex"))]
 use crate::main_stax::app_main;
-use crate::{ctx::RunCtx, utils::get_amount_in_decimals};
+use crate::{ctx::RunCtx, implementation::TICKER_MAX_SIZE, utils::get_amount_in_decimals};
 use crate::{interface::SuiPubKeyAddress, utils::SUI_DECIMALS};
 
 pub mod panic_handler;
@@ -34,6 +34,9 @@ pub enum Error {
     DecodeDPathError,
     CryptographyError(CryptographyError),
     WrongAmountLength,
+    WrongCoinConfigLength,
+    WrongTickerLength,
+    BadTickerASCII,
     WrongFeeLength,
     BadAddressASCII,
     BadAddressLength,
@@ -66,12 +69,23 @@ pub fn check_address(params: &CheckAddressParams) -> Result<bool, Error> {
 // Outputs a string with the amount of SUI.
 //
 // Max sui amount 10_000_000_000 SUI.
-// So max string length is 11 (quotient) + 1 (dot) + 12 (reminder) + 4 (text) = 28
-pub fn get_printable_amount(params: &PrintableAmountParams) -> Result<ArrayString<28>, Error> {
-    let (quotient, remainder_str) = get_amount_in_decimals(params.amount, SUI_DECIMALS);
+// So max string length is 8 (ticker) + 1 (blank) + 11 (quotient) + 1 (dot) + 12 (reminder) = 31
+pub fn get_printable_amount(params: &PrintableAmountParams) -> Result<ArrayString<31>, Error> {
+    let mut ticker = ArrayString::<TICKER_MAX_SIZE>::default();
+    let decimals;
 
-    let mut printable_amount = ArrayString::<28>::default();
-    write!(&mut printable_amount, "SUI {}.{}", quotient, remainder_str)
+    if let (Some(coin_config), false) = (params.coin_config.as_ref(), params.is_fee) {
+        ticker.push_str(&coin_config.ticker);
+        decimals = coin_config.decimals;
+    } else {
+        ticker.push_str("SUI");
+        decimals = SUI_DECIMALS;
+    };
+
+    let (quotient, remainder_str) = get_amount_in_decimals(params.amount, decimals);
+
+    let mut printable_amount = ArrayString::default();
+    write!(&mut printable_amount, "{ticker} {quotient}.{remainder_str}")
         .expect("string always fits");
 
     trace!(

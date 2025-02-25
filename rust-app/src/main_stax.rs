@@ -1,3 +1,4 @@
+use crate::coin_config::init_coin_config_pubkey;
 use crate::ctx::RunCtx;
 use crate::handle_apdu::*;
 use crate::interface::*;

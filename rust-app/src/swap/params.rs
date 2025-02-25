@@ -1,9 +1,11 @@
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayString, ArrayVec};
 use core::convert::{TryFrom, TryInto};
 use core::ffi::CStr;
 use core::mem;
+use core::str;
 use ledger_device_sdk::libcall;
 
+use crate::implementation::TICKER_MAX_SIZE;
 use crate::interface::SuiAddressRaw;
 use crate::swap::Error;
 
@@ -36,21 +38,50 @@ impl TryFrom<&libcall::swap::CheckAddressParams> for CheckAddressParams {
 }
 
 #[derive(Debug)]
+pub struct CoinConfig {
+    pub ticker: ArrayString<TICKER_MAX_SIZE>,
+    pub decimals: u8,
+}
+
+impl CoinConfig {
+    pub fn try_from_bytes(buf: &[u8], buf_len: usize) -> Result<Option<Self>, Error> {
+        if buf_len == 0 {
+            return Ok(None);
+        }
+        let ticker_len = buf[0] as usize;
+        let ticker_str = str::from_utf8(&buf[1..=ticker_len]).map_err(|_| Error::BadTickerASCII)?;
+        let ticker = ArrayString::from(ticker_str).map_err(|_| Error::WrongTickerLength)?;
+
+        let decimals = buf[ticker_len + 1];
+
+        Ok(Some(CoinConfig { ticker, decimals }))
+    }
+}
+
+#[derive(Debug)]
 pub struct PrintableAmountParams {
+    pub coin_config: Option<CoinConfig>,
     pub amount: u64,
+    pub is_fee: bool,
 }
 
 impl TryFrom<&libcall::swap::PrintableAmountParams> for PrintableAmountParams {
     type Error = Error;
 
     fn try_from(params: &libcall::swap::PrintableAmountParams) -> Result<Self, Self::Error> {
+        let coin_config = CoinConfig::try_from_bytes(&params.coin_config, params.coin_config_len)?;
         let amount = u64::from_be_bytes(
             params.amount[params.amount.len() - mem::size_of::<u64>()..]
                 .try_into()
                 .map_err(|_| Error::WrongAmountLength)?,
         );
+        let is_fee = params.is_fee;
 
-        Ok(PrintableAmountParams { amount })
+        Ok(PrintableAmountParams {
+            coin_config,
+            amount,
+            is_fee,
+        })
     }
 }
 

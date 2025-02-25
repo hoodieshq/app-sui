@@ -856,7 +856,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
     ctx.set_swap_sign_success();
 }
 
-const TICKER_MAX_SIZE: usize = 8;
+pub const TICKER_MAX_SIZE: usize = 8;
 
 #[cfg_attr(feature = "speculos", derive(Debug))]
 pub struct CoinInfo {
