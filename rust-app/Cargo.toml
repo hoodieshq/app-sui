@@ -31,14 +31,14 @@ pending_review_screen = []
 test_public_key = []
 
 [target.'cfg(target_family = "bolos")'.dependencies]
-ledger_device_sdk = "1.20.3"
-ledger_secure_sdk_sys = "1.6.7"
+ledger_device_sdk = "1.21.3"
+ledger_secure_sdk_sys = "1.7.1"
 
 [target.'cfg(any(target_os = "nanosplus", target_os = "nanox"))'.dependencies]
 ledger-prompts-ui = { git = "https://github.com/alamgu/ledger-prompts-ui" }
 
 [target.'cfg(target_family = "bolos")'.dev-dependencies.ledger_device_sdk]
-version = "1.20.3"
+version = "1.21.3"
 features = [ "speculos" ]
 
 [[bin]]
