@@ -5,6 +5,7 @@ from struct import unpack, pack
 
 from ragger.backend.interface import BackendInterface, RAPDU
 from bip_utils import Bip32Utils
+from application_client.signing_authority import LEDGER_SIGNER
 
 
 MAX_APDU_LEN: int = 255
@@ -226,28 +227,40 @@ def pop_size_prefixed_buf_from_buf(buffer:bytes) -> Tuple[bytes, int, bytes]:
     data_len = buffer[0]
     return buffer[1+data_len:], data_len, buffer[1:data_len+1]
 
-def build_coin_info(address: bytes, version: int, digest: bytes, ticker: bytes, decimals: int, der_signature: bytes) -> bytes:
-    if len(address) != 32:
-        raise ValueError("Address must be exactly 32 bytes.")
-    if len(digest) != 32:
-        raise ValueError("Digest must be exactly 33 bytes.")
+def build_coin_info(ticker: bytes, decimals: int, addresses: List[bytes]) -> bytes:
     if len(ticker) > 8:
         raise ValueError("Ticker must be at most 8 bytes.")
-    if len(der_signature) > 73:
-        raise ValueError("DER signature must be at most 73 bytes.")
     
-    # Prefix sizes
-    ticker_size = len(ticker)
+    if len(addresses) > 4:
+        raise ValueError("Number of addresses must be at most 4.")
+    
+    for address in addresses:
+        if len(address) != 32:
+            raise ValueError("Address must be exactly 32 bytes.")
+    
+    payload_to_sign: bytes = (
+        pack("B", len(ticker)) + ticker +  # Ticker with size prefix and padding
+        pack("B", decimals) +
+        pack("B", len(addresses)) + # Number of addresses
+        b''.join([address for address in addresses])  # Addresses
+    )
+
+    print(f"payload_to_sign: {payload_to_sign.hex()}")
+
+    if len(payload_to_sign) > 96:
+        raise ValueError("Coin info payload must be at most 96 bytes.")
+
+    # Sign the payload
+    der_signature = LEDGER_SIGNER.sign(payload_to_sign)
     der_signature_size = len(der_signature)
+
+    if der_signature_size > 73:
+        raise ValueError("DER signature must be at most 73 bytes.")
     
     # Pack data into a structured format
     packed_data = (
-        address +
-        pack("<Q", version) +  # Little-endian u64
-        digest +
-        pack("B", ticker_size) + ticker.ljust(8, b'\x00') +  # Ticker with size prefix and padding
-        pack("B", decimals) +
-        pack("B", der_signature_size) + der_signature.ljust(73, b'\x00')  # Signature with size prefix and padding
+        pack("B", len(payload_to_sign)) + payload_to_sign +  # Payload with size prefix
+        pack("B", der_signature_size) + der_signature # Signature with size prefix
     )
-    
+
     return packed_data
