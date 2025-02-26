@@ -742,7 +742,7 @@ async fn match_coin_objects(
             if stored_coin_info
                 .coin_objects
                 .iter()
-                .any(|x| x == coin_object)
+                .all(|x| x != coin_object)
             {
                 return Err(SW_TX_COIN_INFO_MISMATCH);
             }
