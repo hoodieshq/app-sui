@@ -77,13 +77,6 @@ def test_sign_tx_token_transfer(backend, scenario_navigator: NavigateWithScenari
     addresses = [bytes.fromhex(obj_id) for obj_id in tx_data['obj_ids']]
 
     def apdu_task():
-        coin_info = build_coin_info(
-            ticker=b"USDC",
-            decimals=6,
-            addresses=addresses,
-        )
-        client.set_coin_info(coin_info)
-
         return client.sign_tx(path=path, transaction=transaction)
 
     def nav_task():
@@ -113,6 +106,13 @@ def test_sign_tx_token_transfer(backend, scenario_navigator: NavigateWithScenari
     def check_result(result):
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
+
+    coin_info = build_coin_info(
+        ticker=b"USDC",
+        decimals=6,
+        addresses=addresses,
+    )
+    client.set_coin_info(coin_info)
 
     run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
