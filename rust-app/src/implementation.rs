@@ -349,7 +349,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                     .await;
                     match arg {
                         CallArg::ImmOrOwnedObject(obj) => {
-                            if let Err(_) = objects.try_push((obj.address, i)) {
+                            if objects.try_push((obj.address, i)).is_err() {
                                 // Reject on MAX coin objects
                                 reject_on(
                                     core::file!(),
@@ -466,7 +466,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                             match coin {
                                 Argument::GasCoin => {}
                                 Argument::Input(input)
-                                    if objects.iter().find(|(_, idx)| *idx == input).is_some() =>
+                                    if objects.iter().any(|(_, idx)| *idx == input) =>
                                 {
                                     trace!("SplitCoins: Object");
                                 }
@@ -742,14 +742,13 @@ async fn match_coin_objects(
             if stored_coin_info
                 .coin_objects
                 .iter()
-                .find(|&x| x == coin_object)
-                .is_none()
+                .any(|x| x == coin_object)
             {
                 return Err(SW_TX_COIN_INFO_MISMATCH);
             }
         }
 
-        Ok((stored_coin_info.ticker.clone(), stored_coin_info.decimals))
+        Ok((stored_coin_info.ticker, stored_coin_info.decimals))
     });
 
     match res {
@@ -882,7 +881,7 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
         let mut config_buf = ArrayVec::<u8, MAX_CONFIG_SIZE>::new();
         for _ in 0..config_size {
             let b = u8::from_le_bytes(stream.read().await);
-            if let Err(_) = config_buf.try_push(b) {
+            if config_buf.try_push(b).is_err() {
                 reject::<()>(SyscallError::InvalidParameter as u16).await;
             }
         }
@@ -891,7 +890,7 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
         let mut der_signature_buf = ArrayVec::<u8, MAX_DER_SIGNATURE_SIZE>::new();
         for _ in 0..der_sig_size {
             let b = u8::from_le_bytes(stream.read().await);
-            if let Err(_) = der_signature_buf.try_push(b) {
+            if der_signature_buf.try_push(b).is_err() {
                 reject::<()>(SyscallError::InvalidParameter as u16).await;
             }
         }
@@ -910,8 +909,8 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
             let res: Option<_> = try {
                 let ticker_len = u8::from_le_bytes(stream.read().await) as usize;
                 let mut ticker_bytes = [0u8; TICKER_MAX_SIZE];
-                for i in 0..ticker_len {
-                    ticker_bytes[i] = u8::from_le_bytes(stream.read().await);
+                for b in ticker_bytes.iter_mut().take(ticker_len) {
+                    *b = u8::from_le_bytes(stream.read().await);
                 }
 
                 let ticker_str = str::from_utf8(&ticker_bytes[..ticker_len]).ok()?;
@@ -928,7 +927,7 @@ pub async fn set_coin_info_apdu(io: HostIO, ctx: &RunCtx) {
             let cnt = u8::from_le_bytes(stream.read().await) as usize;
             let mut coin_objects: ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH> = ArrayVec::new();
             for _ in 0..cnt {
-                if let Err(_) = coin_objects.try_push(stream.read().await) {
+                if coin_objects.try_push(stream.read().await).is_err() {
                     reject::<()>(SyscallError::InvalidParameter as u16).await;
                 }
             }
