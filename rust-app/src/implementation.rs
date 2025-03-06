@@ -17,6 +17,7 @@ use ledger_log::trace;
 use ledger_parser_combinators::async_parser::*;
 use ledger_parser_combinators::bcs::async_parser::*;
 use ledger_parser_combinators::interp::*;
+use ledger_parser_combinators::schema::Byte;
 
 use core::convert::TryFrom;
 use core::future::Future;
@@ -176,7 +177,25 @@ pub const TRANSFER_OBJECT_ARRAY_LENGTH: usize = 1;
 pub const SPLIT_COIN_ARRAY_LENGTH: usize = 8;
 pub const OBJECT_ARRAY_LENGTH: usize = 4;
 
+pub const MOVE_CALL_MODULE_LENGTH: usize = 16;
+pub const MOVE_CALL_FUNCTION_LENGTH: usize = 32;
+pub const MOVE_CALL_ARGUMENTS_ARRAY_LENGTH: usize = 4;
+
+pub enum TxType {
+    Transfer,
+    Stake,
+    Unstake,
+}
+
+pub struct MoveCall {
+    package: SuiAddressRaw,
+    module: ArrayString<MOVE_CALL_MODULE_LENGTH>,
+    function: ArrayString<MOVE_CALL_FUNCTION_LENGTH>,
+    arguments: ArrayVec<Argument, MOVE_CALL_ARGUMENTS_ARRAY_LENGTH>,
+}
+
 pub enum Command {
+    MoveCall(MoveCall),
     TransferObject(ArrayVec<Argument, TRANSFER_OBJECT_ARRAY_LENGTH>, Argument),
     SplitCoins(Argument, ArrayVec<Argument, SPLIT_COIN_ARRAY_LENGTH>),
     MergeCoins,
@@ -196,6 +215,58 @@ impl<BS: Clone + Readable> AsyncParser<CommandSchema, BS> for DefaultInterp {
             let enum_variant =
                 <DefaultInterp as AsyncParser<ULEB128, BS>>::parse(&DefaultInterp, input).await;
             match enum_variant {
+                0 => {
+                    trace!("CommandSchema: MoveCall");
+                    let package = <DefaultInterp as AsyncParser<SuiAddress, BS>>::parse(
+                        &DefaultInterp,
+                        input,
+                    )
+                    .await;
+                    let module = <SubInterp<DefaultInterp> as AsyncParser<
+                        Vec<Byte, MOVE_CALL_MODULE_LENGTH>,
+                        BS,
+                    >>::parse(&SubInterp(DefaultInterp), input)
+                    .await;
+                    let function = <SubInterp<DefaultInterp> as AsyncParser<
+                        Vec<Byte, MOVE_CALL_FUNCTION_LENGTH>,
+                        BS,
+                    >>::parse(&SubInterp(DefaultInterp), input)
+                    .await;
+                    let _type_args = <SubInterp<DefaultInterp> as AsyncParser<
+                        Vec<Byte, MOVE_CALL_ARGUMENTS_ARRAY_LENGTH>,
+                        BS,
+                    >>::parse(&SubInterp(DefaultInterp), input)
+                    .await;
+                    let arguments = <SubInterp<DefaultInterp> as AsyncParser<
+                        Vec<ArgumentSchema, MOVE_CALL_ARGUMENTS_ARRAY_LENGTH>,
+                        BS,
+                    >>::parse(&SubInterp(DefaultInterp), input)
+                    .await;
+
+                    let move_call: Option<MoveCall> = try {
+                        MoveCall {
+                            package,
+                            module: str::from_utf8(&module).map(ArrayString::from).ok()?.ok()?,
+                            function: str::from_utf8(&function)
+                                .map(ArrayString::from)
+                                .ok()?
+                                .ok()?,
+                            arguments,
+                        }
+                    };
+
+                    let Some(move_call) = move_call else {
+                        trace!("MoveCall, bad utf8 string");
+                        reject_on(
+                            core::file!(),
+                            core::line!(),
+                            SyscallError::NotSupported as u16,
+                        )
+                        .await
+                    };
+
+                    Command::MoveCall(move_call)
+                }
                 1 => {
                     trace!("CommandSchema: TransferObject");
                     let v1 = <SubInterp<DefaultInterp> as AsyncParser<
@@ -320,7 +391,72 @@ impl HasOutput<ProgrammableTransaction> for ProgrammableTransaction {
         <DefaultInterp as HasOutput<Recipient>>::Output,
         <DefaultInterp as HasOutput<Amount>>::Output,
         ArrayVec<SuiAddressRaw, OBJECT_ARRAY_LENGTH>,
+        TxType,
     );
+}
+
+async fn move_call_stacking(
+    move_call: &MoveCall,
+    recipient_index: &Option<u16>,
+    verified_recipient: &mut bool,
+    tx_type: &mut TxType,
+) {
+    if *verified_recipient {
+        // Reject more than one MoveCall
+        reject_on::<()>(
+            core::file!(),
+            core::line!(),
+            SyscallError::NotSupported as u16,
+        )
+        .await;
+    }
+
+    const PACKAGE_ADDRESS: SuiAddressRaw = [
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x3,
+    ];
+
+    let is_package_mathced = move_call.package == PACKAGE_ADDRESS;
+
+    let (true, "sui_system", "request_add_stake") = (
+        is_package_mathced,
+        move_call.module.as_str(),
+        move_call.function.as_str(),
+    ) else {
+        trace!("MoveCall function not supported");
+        reject_on(
+            core::file!(),
+            core::line!(),
+            SyscallError::NotSupported as u16,
+        )
+        .await
+    };
+
+    *tx_type = TxType::Stake;
+
+    // 3rd argument is the recipient
+    let arg_idx = move_call
+        .arguments
+        .get(2)
+        .map(|arg| {
+            if let Argument::Input(idx) = arg {
+                Some(*idx)
+            } else {
+                None
+            }
+        })
+        .flatten();
+
+    if recipient_index != &arg_idx {
+        trace!("MoveCall recipient mismatch");
+        reject_on(
+            core::file!(),
+            core::line!(),
+            SyscallError::NotSupported as u16,
+        )
+        .await
+    }
+    *verified_recipient = true;
 }
 
 impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for ProgrammableTransaction {
@@ -334,6 +470,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
             let mut recipient_index = None;
             let mut amounts: ArrayVec<(u64, u16), SPLIT_COIN_ARRAY_LENGTH> = ArrayVec::new();
             let mut objects = ArrayVec::<(SuiAddressRaw, u16), OBJECT_ARRAY_LENGTH>::new();
+            let mut tx_type = TxType::Transfer;
 
             // Handle inputs
             {
@@ -429,6 +566,15 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
                     )
                     .await;
                     match c {
+                        Command::MoveCall(move_call) => {
+                            move_call_stacking(
+                                &move_call,
+                                &recipient_index,
+                                &mut verified_recipient,
+                                &mut tx_type,
+                            )
+                            .await
+                        }
                         Command::TransferObject(_nested_results, recipient_input) => {
                             if verified_recipient {
                                 // Reject more than one TransferObject(s)
@@ -526,7 +672,7 @@ impl<BS: Clone + Readable> AsyncParser<ProgrammableTransaction, BS> for Programm
             let objects: ArrayVec<_, OBJECT_ARRAY_LENGTH> =
                 objects.into_iter().map(|(addr, _)| addr).collect();
 
-            (recipient, total_amount, objects)
+            (recipient, total_amount, objects, tx_type)
         }
     }
 }
@@ -784,7 +930,7 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
 
     if known_txn {
         let mut txn = input[0].clone();
-        let ((recipient, total_amount, coin_objects), gas_budget) =
+        let ((recipient, total_amount, coin_objects, _tx_type), gas_budget) =
             tx_parser().parse(&mut txn).await;
 
         let mut bs = input[1].clone();
