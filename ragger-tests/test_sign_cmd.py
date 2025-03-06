@@ -60,6 +60,11 @@ TX_DATA = [
             '05d49733c40729a9deb191907c6121dbf86a972ee663de6928960aa16d98e5ba',
             '1aeaee00201e85eea634b143cc6f14d6ed294bf96d2e28639c2a8f87974be6a2'
         ]
+    },
+    {
+        'case_name': 'tx_request_add_stake',
+        'tx_data': '010203000003000800f2052a01000000010100000000000000000000000000000000000000000000000000000000000000050100000000000000010020440eb0b7d0b15fee40f4da3b62e8090ba9c6cf399d76bf14c9db904d0b33cc64020200010100000000000000000000000000000000000000000000000000000000000000000000030a7375695f73797374656d11726571756573745f6164645f7374616b650003010100020000010200c4f0120740993f760aa6eb512010ac9c2f0c240d09f739581279997deec9327501e7a9478e2c0aeb8939a3a552c4a66e257bb65f360f8ef515c640640648ac87f0720000000000000020bd25c7c84f2cba163357495e977d348bb394ccf4341d1b6931fe88830f4b3e75c4f0120740993f760aa6eb512010ac9c2f0c240d09f739581279997deec93275e8030000000000003cc50f020000000000',
+        'obj_ids': []
     }
 ]
 
@@ -107,12 +112,14 @@ def test_sign_tx_token_transfer(backend, scenario_navigator: NavigateWithScenari
         assert len(result) == 64
         assert check_signature_validity(public_key, result, transaction)
 
-    coin_info = build_coin_info(
-        ticker=b"USDC",
-        decimals=6,
-        addresses=addresses,
-    )
-    client.set_coin_info(coin_info)
+    # If not empty, set the coin info
+    if addresses:
+        coin_info = build_coin_info(
+            ticker=b"USDC",
+            decimals=6,
+            addresses=addresses,
+        )
+        client.set_coin_info(coin_info)
 
     run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
 
