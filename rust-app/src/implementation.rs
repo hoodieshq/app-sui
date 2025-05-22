@@ -146,9 +146,6 @@ pub async fn sign_apdu(io: HostIO, ctx: &RunCtx, settings: Settings, ui: UserInt
             };
 
             if ctx.is_swap() {
-                if coin_type.0 != SUI_COIN_ID {
-                    reject::<()>(SyscallError::NotSupported as u16).await;
-                }
                 let expected = ctx.get_swap_tx_params();
                 check_tx_params(expected, &tx_params).await;
             } else {
