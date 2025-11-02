@@ -35,3 +35,11 @@ def test_get_public_key_confirm_accepted(backend, scenario_navigator, firmware, 
         assert address.hex() == "56b19e720f3bfa8caaef806afdd5dfaffd0d6ec9476323a14d1638ad734b2ba5"
 
     run_apdu_and_nav_tasks_concurrently(apdu_task, nav_task, check_result)
+
+
+def test_malformed_command_sequence(backend):
+    for path in [ "m/44'/784'/0'"]:
+        client = Client(backend, use_block_protocol=True)
+
+        for _ in range(2):
+            client.send_raw(bytes.fromhex("0002000021007cfea3aa1e07cc4b500c237a8bf8dcb31d5cb855f29dfdeb92f9e4df9493a6cd"))
